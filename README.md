@@ -54,7 +54,7 @@ mise run pull           # all subtrees
 mise run pull dashboard # one subtree
 ```
 
-Run this to fast-forward the meta-repo's `main` branch, prune merged local branches whose upstream branch was deleted, then pull subtree updates. For high-velocity repos, you might run it daily; for stable ones, weekly is fine. `mise run push` will tell you with a non-fast-forward error if you've waited too long — recovery is `pull`, then `git rebase main` in the worktree, then `push` again.
+Run this to fast-forward the meta-repo's `main` branch, prune local branches whose upstream branch was deleted, then pull subtree updates. For high-velocity repos, you might run it daily; for stable ones, weekly is fine. `mise run push` will tell you with a non-fast-forward error if you've waited too long — recovery is `pull`, then `git rebase main` in the worktree, then `push` again.
 
 ## All tasks
 
@@ -62,7 +62,7 @@ Run this to fast-forward the meta-repo's `main` branch, prune merged local branc
 |---|---|---|
 | `add <name> <url> [branch]` | main checkout | Mount upstream as subtree at `repos/<name>/`. |
 | `branch <name>` | anywhere | Create `worktrees/<name>` on branch `<name>`. |
-| `pull [name]` | main checkout | Fast-forward `main`, prune merged deleted-upstream branches/worktrees, then `git subtree pull` for all subtrees, or just one. |
+| `pull [name]` | main checkout | Fast-forward `main`, prune deleted-upstream branches/worktrees, then `git subtree pull` for all subtrees, or just one. |
 | `push` | worktree | Push touched subtrees to their upstream remotes. |
 | `test` | anywhere | Run the hook + task validation suite. |
 
@@ -117,7 +117,7 @@ When blocked, the agent gets a JSON `decision: "block"` with a `reason` it reads
 ## Notes
 
 - The `META_ALLOW_COMMIT=1` env var bypasses pre-commit for one command. Don't `export` it.
-- `mise run pull` cleans up local branches/worktrees after PRs are merged and their remote branches are deleted. It only deletes branches already merged into `main`.
+- `mise run pull` cleans up local branches/worktrees after their remote branches are deleted.
 - If `mise run push` is ever slow, cache subtree history once: `git subtree split --prefix=repos/<name> --rejoin` from the main checkout. Rarely needed.
 - Drop into raw git any time the tasks don't fit. The tasks are wrappers, not a separate system.
 
