@@ -9,7 +9,7 @@ set -euo pipefail
 branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "DETACHED")
 toplevel=$(git rev-parse --show-toplevel)
 
-# No direct commits on main
+# No direct commits on main.
 if [[ "$branch" == "main" ]]; then
   cat >&2 <<EOF
 ✗ Direct commits to main are not allowed.
@@ -21,15 +21,13 @@ EOF
   exit 1
 fi
 
-# Commits must come from a worktree, not the main checkout.
-# Main checkout: $toplevel/.git is a directory.
-# Worktree:      $toplevel/.git is a file.
-if [[ -d "$toplevel/.git" ]]; then
+# The public workspace repo must never commit private/base checkout contents.
+if git diff --cached --name-only | grep -qE '^(repos|worktrees)/'; then
   cat >&2 <<EOF
-✗ Commits must be made from a worktree.
+✗ Workspace commits cannot include repos/ or worktrees/.
 
-  mise run branch <name>
-  cd worktrees/<name>
+repos/ contains base clones and worktrees/ contains per-task repo worktrees.
+Only commit workspace tooling, docs, hooks, and config in this repo.
 EOF
   exit 1
 fi

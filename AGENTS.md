@@ -1,71 +1,78 @@
 # Agent workspace
 
-This is a **meta-repo** that mounts multiple repositories as git subtrees under `repos/`. You work across all of them as if they were one monorepo. When you're done, `mise run push` pushes one branch per upstream repo you touched.
+This is a public **workspace repo** that coordinates multiple normal Git clones. Source repos live as local clones under `repos/`, and per-task Git worktrees live under `worktrees/<task>/<repo>`.
 
-## What you see
-
-Inside any worktree (where you should always be), the layout is:
+## Layout
 
 ```
-repos/<name-1>/     ← full source of upstream repo 1
-repos/<name-2>/     ← full source of upstream repo 2
-repos/<name-3>/     ← full source of upstream repo 3
+repos/<repo>/                 ← base clone, read-only cache of the default branch
+worktrees/<task>/<repo>/      ← task checkout, branch name matches <task>
 ```
 
-`git status`, `git diff`, `git log` work across all of them in one view. Edit files anywhere; commit normally.
+Agents should do repo work only inside `worktrees/<task>/<repo>/`. Never edit, commit, or push from `repos/<repo>/`.
 
 ## Workflow
 
-### 1. Start a task
+### 1. Sync
 
 ```bash
-mise run branch <name>          # e.g. jira-123, fix-webhook, feat-auth
-cd worktrees/<name>
+mise run pull
 ```
 
-This creates a worktree on a new branch with the same name. Use any branch name your team's conventions call for — there's no required prefix.
+This fast-forwards the workspace repo and each base clone in `repos/*`.
 
-### 2. Work
+### 2. Start A Task
 
-- Edit files anywhere under `repos/<name>/`.
-- Commit one logical change per commit. Commits that span multiple subtrees are fine — `mise run push` splits them correctly into per-repo upstream branches.
-- Write commit messages from each touched repo's perspective. The `repos/` structure is invisible upstream — don't reference those paths.
+```bash
+mise run branch JIRA-123
+cd worktrees/JIRA-123
+```
 
-### 3. Stay in sync (when needed)
+This creates one Git worktree per configured repo. Each checkout uses branch `JIRA-123`, so PR/MR branches are consistent across repos.
 
-If you notice a subtree is far behind upstream (`git log HEAD..<remote>/main` shows lots of commits), tell the user. They'll run `mise run pull <name>` from the meta main checkout. After that, you `git rebase main` in your worktree and continue.
+### 3. Work
+
+- Edit files under `worktrees/<task>/<repo>/`.
+- Commit inside each repo worktree as usual.
+- Use `mise run status` and `mise run diff` from `worktrees/<task>` for aggregated views.
+- Do not commit from `repos/*`; those are base clones only.
 
 ### 4. Ship
 
 ```bash
-mise run push           # detects touched subtrees and pushes each upstream branch
+mise run push
 ```
 
-If push fails with "non-fast-forward," upstream moved during your work. Same recovery as above: ask the user to `mise run pull <name>`, then rebase, then re-push.
+Run this from `worktrees/<task>`. It pushes branch `<task>` for each repo with commits.
 
-## Rules (enforced by hooks)
+### 5. Clean Up
 
-- Edits must be inside `worktrees/*/`
-- No git mutations from the meta main checkout
-- No commits or pushes on `main`
-- `.githooks/`, `AGENTS.md`, `.claude/`, `opencode.json`, `mise.toml`, `hk.pkl`, `.gitconfig`, and `mise-tasks/*` are write-protected unless the user explicitly asks
-- `--no-verify` and `core.hooksPath` reconfiguration are blocked
-- `git worktree remove --force` is blocked
+```bash
+mise run clean JIRA-123
+```
 
-When a hook blocks you, read the reason and adjust. Don't try to circumvent it.
+This removes clean repo worktrees for the task.
 
-## Use mise tasks over raw git for these
+## Rules
 
-| Goal | Use | Not |
-|---|---|---|
-| Start work | `mise run branch <name>` | `git worktree add ...` |
-| Push subtree branches | `mise run push` | manual `git subtree push` invocations |
-| Pull meta/subtree changes and prune deleted-upstream worktrees | (tell user) `mise run pull` | `git pull` + `git subtree pull` |
+- `repos/*` is read-only for agents.
+- Repo edits happen in `worktrees/<task>/<repo>/*`.
+- Task name and branch name are the same across repos.
+- The workspace repo should only commit tooling, docs, hooks, and config.
+- Workspace commits must not include `repos/*` or `worktrees/*`.
+- `--no-verify`, `core.hooksPath` reconfiguration, and `git worktree remove --force` are blocked.
 
-Raw git is the right tool for everything else: `git status`, `git diff`, `git log`, `git add`, `git commit`, `git rebase`, `git checkout`.
+## Mise Tasks
 
-## Where am I?
+| Goal | Use |
+|---|---|
+| Add a repo clone | `mise run add <name> <url> [branch]` |
+| Pull workspace and base repos | `mise run pull [repo...]` |
+| Create a task stripe | `mise run branch <task> [repo...]` |
+| Aggregate status | `mise run status [repo...]` |
+| Aggregate diff | `mise run diff [repo...]` |
+| Push task branches | `mise run push [repo...]` |
+| Remove clean task worktrees | `mise run clean <task>` |
+| List repos and tasks | `mise run list` |
 
-`git rev-parse --show-toplevel`:
-- ends in `/worktrees/<something>` → you're in a worktree, good.
-- equals the meta root → you're in the main checkout; `cd` into a worktree first.
+Raw Git is fine inside `worktrees/<task>/<repo>`. Prefer mise tasks for cross-repo operations.

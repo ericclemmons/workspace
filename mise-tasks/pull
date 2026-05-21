@@ -1,76 +1,43 @@
 #!/usr/bin/env bash
-#MISE description="Pull meta repo, prune gone-upstream worktrees, then pull subtrees. Usage: pull [name]"
+#MISE description="Fast-forward workspace and base repos. Usage: pull [repo...]"
 source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
 
-worktree_for_branch() {
-  local branch=$1 path="" line
-  while IFS= read -r line; do
-    case "$line" in
-      worktree\ *) path=${line#worktree } ;;
-      "branch refs/heads/$branch") echo "$path"; return 0 ;;
-      "") path="" ;;
-    esac
-  done < <(git worktree list --porcelain)
-}
-
-prune_gone_upstream_branches() {
-  local pruned=0 branch upstream_state wt
-
-  info "pruning deleted remote branches"
-  git fetch --prune
-
-  while IFS='|' read -r branch upstream_state; do
-    [[ "$branch" != "main" ]] || continue
-    [[ "$upstream_state" == "[gone]" ]] || continue
-
-    wt=$(worktree_for_branch "$branch")
-    if [[ -n "$wt" ]]; then
-      info "removing worktree $wt"
-      git worktree remove "$wt" || die "failed to remove worktree for $branch"
-    fi
-
-    info "deleting branch $branch"
-    git branch -D "$branch"
-    pruned=$((pruned + 1))
-  done < <(git for-each-ref --format='%(refname:short)|%(upstream:track)' refs/heads)
-
-  [[ $pruned -gt 0 ]] && ok "pruned $pruned branch(es)" || warn "no branches to prune"
-}
-
-require_main_checkout
-cd "$(meta_root)"
+require_workspace_root
+root=$(workspace_root)
 
 git diff --quiet && git diff --cached --quiet \
-  || die "uncommitted changes — commit or stash first"
+  || die "workspace has uncommitted changes — commit or stash first"
 
 if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
-  info "pulling meta repo"
-  git pull
+  info "pulling workspace"
+  git pull --ff-only
 else
-  warn "skipping meta repo pull — main has no upstream"
+  warn "skipping workspace pull — main has no upstream"
 fi
 
-prune_gone_upstream_branches
-
-target=${1:-}
-if [[ -n "$target" ]]; then
-  [[ -d "repos/$target" ]] || die "no subtree: repos/$target"
-  subtrees=("$target")
-else
-  subtrees=()
-  while IFS= read -r name; do
-    subtrees+=("$name")
-  done < <(list_subtrees)
+repos=("$@")
+if [[ ${#repos[@]} -eq 0 ]]; then
+  repos=()
+  while IFS= read -r repo; do repos+=("$repo"); done < <(list_repos)
 fi
 
-[[ ${#subtrees[@]} -gt 0 ]] || { warn "no subtrees mounted"; exit 0; }
+if [[ ${#repos[@]} -eq 0 ]]; then
+  warn "no repos configured"
+  ok "done"
+  exit 0
+fi
 
-for name in "${subtrees[@]}"; do
-  git remote get-url "$name" >/dev/null 2>&1 \
-    || { warn "skipping repos/$name — no remote"; continue; }
-  branch=$(upstream_branch "$name")
-  info "pulling $name ($branch)"
-  git subtree pull --prefix="repos/$name" "$name" "$branch" --squash \
-    || die "pull failed for $name — resolve conflicts and commit, then re-run"
+for repo in "${repos[@]}"; do
+  validate_name "repo" "$repo"
+  base="$root/repos/$repo"
+  [[ -d "$base/.git" || -f "$base/.git" ]] || die "repos/$repo is not a git repo"
+  repo_clean "$base" || die "repos/$repo has uncommitted changes; base repos must stay clean"
+
+  default=$(repo_default_branch "$base")
+  info "pulling $repo ($default)"
+  git -C "$base" fetch --prune origin
+  git -C "$base" switch -q "$default"
+  git -C "$base" pull --ff-only origin "$default"
 done
+
 ok "done"

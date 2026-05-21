@@ -14,36 +14,88 @@ ok()   { echo "${C_GREEN}✓${C_RESET} $*"; }
 warn() { echo "${C_YELLOW}!${C_RESET} $*" >&2; }
 die()  { echo "${C_RED}✗${C_RESET} $*" >&2; exit 1; }
 
-# Meta repo root (works from worktrees too)
-meta_root() {
-  local common
-  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
-    || die "not inside a git repo"
-  dirname "$common"
+TASK_DIR=$(cd "${MISE_TASK_DIR:-$(dirname "${BASH_SOURCE[0]}")}" && pwd -P)
+
+workspace_root() {
+  dirname "$TASK_DIR"
 }
 
-is_main_checkout() {
-  local root common
-  root=$(git rev-parse --show-toplevel 2>/dev/null) || return 1
-  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
-  [[ "$root" == "$(dirname "$common")" ]]
+require_workspace_root() {
+  local root cwd
+  root=$(workspace_root)
+  cwd=$(pwd -P)
+  [[ "$cwd" == "$root" ]] || die "run this from the workspace root: $root"
 }
 
-require_main_checkout() {
-  is_main_checkout || die "run this from the meta main checkout, not a worktree"
+validate_name() {
+  local kind=$1 name=$2
+  [[ -n "$name" ]] || die "missing $kind name"
+  [[ "$name" =~ ^[a-zA-Z0-9_.-]+$ ]] || die "invalid $kind name: '$name'"
+  [[ "$name" != "." && "$name" != ".." ]] || die "invalid $kind name: '$name'"
 }
 
-require_worktree() {
-  is_main_checkout && die "run this from inside a worktree, not the main checkout"
-  return 0
+list_repos() {
+  local root name
+  root=$(workspace_root)
+  [[ -d "$root/repos" ]] || return 0
+  for path in "$root"/repos/*; do
+    [[ -d "$path/.git" || -f "$path/.git" ]] || continue
+    name=$(basename "$path")
+    printf '%s\n' "$name"
+  done | sort
 }
 
-# Default upstream branch for a remote
-upstream_branch() {
-  git config --get "subtree.$1.branch" 2>/dev/null || echo "main"
+repo_default_branch() {
+  local repo=$1 configured ref
+  configured=$(git -C "$repo" config --get workspace.defaultBranch 2>/dev/null || true)
+  [[ -n "$configured" ]] && { echo "$configured"; return 0; }
+
+  ref=$(git -C "$repo" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
+  if [[ -n "$ref" ]]; then
+    echo "${ref#origin/}"
+  else
+    echo "main"
+  fi
 }
 
-list_subtrees() {
-  local root; root=$(meta_root)
-  find "$root/repos" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | sort
+task_root() {
+  local root cwd rel task
+  root=$(workspace_root)
+  cwd=$(pwd -P)
+  case "$cwd" in
+    "$root"/worktrees/*)
+      rel=${cwd#"$root"/worktrees/}
+      task=${rel%%/*}
+      echo "$root/worktrees/$task"
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+task_name() {
+  basename "$(task_root)"
+}
+
+require_task_root() {
+  local root cwd task
+  task=$(task_root) || die "run this from inside worktrees/<task>"
+  cwd=$(pwd -P)
+  [[ "$cwd" == "$task" ]] || die "run this from the task root: $task"
+  root=$(workspace_root)
+  [[ "$task" == "$root"/worktrees/* ]] || die "not inside a workspace task"
+}
+
+list_task_repos() {
+  local task path name
+  task=$(task_root) || return 0
+  for path in "$task"/*; do
+    [[ -d "$path/.git" || -f "$path/.git" ]] || continue
+    name=$(basename "$path")
+    printf '%s\n' "$name"
+  done | sort
+}
+
+repo_clean() {
+  local repo=$1
+  git -C "$repo" diff --quiet && git -C "$repo" diff --cached --quiet
 }

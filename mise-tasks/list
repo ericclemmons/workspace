@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+#MISE description="List configured base repos and task worktrees. Usage: list"
+source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
+
+require_workspace_root
+root=$(workspace_root)
+
+echo "repos"
+repos=()
+while IFS= read -r repo; do repos+=("$repo"); done < <(list_repos)
+if [[ ${#repos[@]} -eq 0 ]]; then
+  echo "  (none)"
+else
+  for repo in "${repos[@]}"; do
+    url=$(git -C "$root/repos/$repo" remote get-url origin 2>/dev/null || echo "no origin")
+    branch=$(repo_default_branch "$root/repos/$repo")
+    echo "  $repo  $url  default=$branch"
+  done
+fi
+
+echo
+echo "worktrees"
+if [[ ! -d "$root/worktrees" ]]; then
+  echo "  (none)"
+  exit 0
+fi
+
+found=0
+for task in "$root"/worktrees/*; do
+  [[ -d "$task" ]] || continue
+  found=1
+  echo "  $(basename "$task")"
+  if [[ -f "$task/.git" || -d "$task/.git" ]]; then
+    echo "    (legacy workspace git worktree; not managed by repo-worktree tasks)"
+    continue
+  fi
+  task_has_repo=0
+  for repo in "$task"/*; do
+    [[ -d "$repo/.git" || -f "$repo/.git" ]] || continue
+    task_has_repo=1
+    branch=$(git -C "$repo" symbolic-ref --short HEAD 2>/dev/null || echo "detached")
+    echo "    $(basename "$repo")  branch=$branch"
+  done
+  [[ $task_has_repo -eq 1 ]] || echo "    (no repo worktrees)"
+done
+[[ $found -eq 1 ]] || echo "  (none)"

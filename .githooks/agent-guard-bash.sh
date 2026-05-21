@@ -11,22 +11,28 @@ block() {
   exit 2
 }
 
-# Resolve meta root if we're inside the meta repo
-meta_root=""
-if common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
-  meta_root=$(dirname "$common")
-  meta_root=$(cd "$meta_root" && pwd -P)
-fi
+# Workspace root is based on this guard's location so nested repos cannot hide it.
+meta_root=$(cd "$(dirname "$0")/.." && pwd -P)
 
 cwd=$(pwd -P)
 
-# Mutating git commands from meta main checkout → block (use a worktree)
-if [[ -n "$meta_root" ]] && [[ "$cwd" == "$meta_root" ]]; then
-  if echo "$cmd" | grep -qE '\bgit[[:space:]]+(commit|add|push|merge|rebase|cherry-pick|reset|restore|stash)\b'; then
-    block "Refusing mutating git command from the meta main checkout. cd into worktrees/<branch>/ first, or create one:
-  mise run branch <name>
-  cd worktrees/<name>"
+# Dangerous workspace-root git commands are blocked. Workspace maintenance commits
+# are allowed, but pre-commit prevents committing repos/ or worktrees/ content.
+if [[ "$cwd" == "$meta_root" ]]; then
+  if echo "$cmd" | grep -qE '\bgit[[:space:]]+(push|merge|rebase|cherry-pick|reset|restore|stash)\b'; then
+    block "Refusing dangerous git command from the workspace root. Use mise tasks for repo work, or a normal workspace branch for tooling/docs changes."
   fi
+fi
+
+# Base repos are read-only caches. Mutations must happen in worktrees/<task>/<repo>.
+if [[ "$cwd" == "$meta_root/repos/"* ]]; then
+  if echo "$cmd" | grep -qE '\bgit[[:space:]]+(commit|add|push|merge|rebase|cherry-pick|reset|restore|stash|switch|checkout)\b'; then
+    block "Refusing mutating git command inside ./repos/. Base repos are read-only caches. Use worktrees/<task>/<repo>."
+  fi
+fi
+
+if echo "$cmd" | grep -qE '\bgit[[:space:]]+(-C[[:space:]]+)?([^;&|[:space:]]*/)?repos/[^;&|[:space:]]*[[:space:]]+(commit|add|push|merge|rebase|cherry-pick|reset|restore|stash|switch|checkout)\b'; then
+  block "Refusing mutating git command targeting ./repos/. Base repos are read-only caches."
 fi
 
 # Block commits/pushes when HEAD is main (works in any cwd)
