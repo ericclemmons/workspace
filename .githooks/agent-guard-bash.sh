@@ -15,9 +15,10 @@ block() {
 meta_root=""
 if common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
   meta_root=$(dirname "$common")
+  meta_root=$(cd "$meta_root" && pwd -P)
 fi
 
-cwd=$(pwd)
+cwd=$(pwd -P)
 
 # Mutating git commands from meta main checkout → block (use a worktree)
 if [[ -n "$meta_root" ]] && [[ "$cwd" == "$meta_root" ]]; then

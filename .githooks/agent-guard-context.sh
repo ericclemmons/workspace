@@ -2,10 +2,11 @@
 # UserPromptSubmit hook. Stdout is injected into the agent's context.
 set -euo pipefail
 
-cwd=$(pwd)
+cwd=$(pwd -P)
 meta_root=""
 if common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
   meta_root=$(dirname "$common")
+  meta_root=$(cd "$meta_root" && pwd -P)
 fi
 [[ -z "$meta_root" ]] && exit 0
 
