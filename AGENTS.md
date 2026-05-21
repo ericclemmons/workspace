@@ -1,6 +1,6 @@
 # Agent workspace
 
-This is a **meta-repo** that mounts multiple repositories as git subtrees under `repos/`. You work across all of them as if they were one monorepo. When you're done, `mise run push` opens one PR per upstream repo you touched.
+This is a **meta-repo** that mounts multiple repositories as git subtrees under `repos/`. You work across all of them as if they were one monorepo. When you're done, `mise run push` pushes one branch per upstream repo you touched.
 
 ## What you see
 
@@ -28,7 +28,7 @@ This creates a worktree on a new branch with the same name. Use any branch name 
 ### 2. Work
 
 - Edit files anywhere under `repos/<name>/`.
-- Commit one logical change per commit. Commits that span multiple subtrees are fine — `mise run push` splits them correctly into per-repo PRs.
+- Commit one logical change per commit. Commits that span multiple subtrees are fine — `mise run push` splits them correctly into per-repo upstream branches.
 - Write commit messages from each touched repo's perspective. The `repos/` structure is invisible upstream — don't reference those paths.
 
 ### 3. Stay in sync (when needed)
@@ -38,9 +38,7 @@ If you notice a subtree is far behind upstream (`git log HEAD..<remote>/main` sh
 ### 4. Ship
 
 ```bash
-mise run push           # detects touched subtrees, pushes each, opens PRs
-mise run push --draft   # draft PRs
-mise run push --no-pr   # push branches only
+mise run push           # detects touched subtrees and pushes each upstream branch
 ```
 
 If push fails with "non-fast-forward," upstream moved during your work. Same recovery as above: ask the user to `mise run pull <name>`, then rebase, then re-push.
@@ -50,7 +48,7 @@ If push fails with "non-fast-forward," upstream moved during your work. Same rec
 - Edits must be inside `worktrees/*/`
 - No git mutations from the meta main checkout
 - No commits or pushes on `main`
-- `.githooks/`, `AGENTS.md`, `.claude/`, `opencode.json`, `mise.toml`, and `mise-tasks/*` are write-protected unless the user explicitly asks
+- `.githooks/`, `AGENTS.md`, `.claude/`, `opencode.json`, `mise.toml`, `hk.pkl`, and `mise-tasks/*` are write-protected unless the user explicitly asks
 - `--no-verify` and `core.hooksPath` reconfiguration are blocked
 - `git worktree remove --force` is blocked
 
@@ -61,7 +59,7 @@ When a hook blocks you, read the reason and adjust. Don't try to circumvent it.
 | Goal | Use | Not |
 |---|---|---|
 | Start work | `mise run branch <name>` | `git worktree add ...` |
-| Push and open PRs | `mise run push` | `git subtree push` + `gh pr create` |
+| Push subtree branches | `mise run push` | manual `git subtree push` invocations |
 | Pull upstream changes | (tell user) `mise run pull` | `git subtree pull` |
 
 Raw git is the right tool for everything else: `git status`, `git diff`, `git log`, `git add`, `git commit`, `git rebase`, `git checkout`.

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Blocks structurally wrong commits in the meta repo.
-# Installed via: git config core.hooksPath .githooks
+# Run by hk via hk.pkl.
 set -euo pipefail
 
-# Allow privileged ops (setup script uses this for the bootstrap commit)
+# Allow privileged ops for tests/bootstrap commits.
 [[ "${META_ALLOW_COMMIT:-}" == "1" ]] && exit 0
 
 branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "DETACHED")

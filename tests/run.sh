@@ -40,7 +40,13 @@ section() { echo; echo "$1"; }
 
 fresh_meta() {
   local dir; dir=$(mktemp -d -p "$SCRATCH" meta.XXXXXX)
-  cp -r "$TEMPLATE_ROOT/"* "$TEMPLATE_ROOT/".[!.]* "$dir/" 2>/dev/null || true
+  local path base
+  for path in README.md AGENTS.md Brewfile mise.toml hk.pkl .gitignore opencode.json \
+              .claude .githooks mise-tasks tests repos; do
+    [[ -e "$TEMPLATE_ROOT/$path" ]] || continue
+    base=$(basename "$path")
+    cp -R "$TEMPLATE_ROOT/$path" "$dir/$base"
+  done
   cd "$dir"
   git init -q -b main
   git config user.email "test@test"
@@ -69,11 +75,11 @@ run_hook() {
 test_structural() {
   section "structural"
 
-  for f in README.md AGENTS.md Brewfile mise.toml .gitignore \
+  for f in README.md AGENTS.md Brewfile mise.toml hk.pkl .gitignore \
            opencode.json .claude/settings.json \
            .githooks/pre-commit .githooks/agent-guard-edit.sh \
            .githooks/agent-guard-bash.sh .githooks/agent-guard-context.sh \
-           mise-tasks/_lib mise-tasks/setup mise-tasks/add mise-tasks/branch \
+           mise-tasks/_lib mise-tasks/add mise-tasks/branch \
            mise-tasks/pull mise-tasks/push mise-tasks/test \
            ; do
     [[ -f "$TEMPLATE_ROOT/$f" ]] && pass "exists: $f" || fail "exists: $f"
@@ -167,6 +173,9 @@ test_agent_edit_guard() {
 
   run_hook "$hook" "{\"tool_input\":{\"file_path\":\"$meta/worktrees/feat-x/mise-tasks/push\"}}"
   assert_exit_code 2 "$HOOK_EXIT" "blocks edit to mise-tasks/"
+
+  run_hook "$hook" "{\"tool_input\":{\"file_path\":\"$meta/worktrees/feat-x/hk.pkl\"}}"
+  assert_exit_code 2 "$HOOK_EXIT" "blocks edit to hk.pkl"
 
   # Supports both .file_path and .path
   run_hook "$hook" "{\"tool_input\":{\"path\":\"$meta/worktrees/feat-x/repos/foo.txt\"}}"
@@ -264,12 +273,6 @@ test_mise_tasks() {
   section "mise tasks"
   local meta; meta=$(fresh_meta); cd "$meta"
 
-  # setup is idempotent
-  bash mise-tasks/setup >/dev/null 2>&1; rc=$?
-  assert_exit_code 0 $rc "setup runs cleanly"
-  bash mise-tasks/setup >/dev/null 2>&1; rc=$?
-  assert_exit_code 0 $rc "setup is idempotent"
-
   # branch
   bash mise-tasks/branch jira-123 >/dev/null 2>&1; rc=$?
   assert_exit_code 0 $rc "branch creates a worktree"
@@ -304,7 +307,7 @@ test_mise_tasks() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# End-to-end: add + branch + push --no-pr against a local upstream
+# End-to-end: add + branch + push against a local upstream
 # ──────────────────────────────────────────────────────────────────────────────
 
 test_end_to_end() {
@@ -330,15 +333,15 @@ test_end_to_end() {
   out=$(bash mise-tasks/add fakerepo "$upstream" main 2>&1 || true)
   assert_contains "already exists" "$out" "add rejects duplicate"
 
-  # branch + commit + push --no-pr
+  # branch + commit + push
   bash mise-tasks/branch e2e >/dev/null
   cd "$meta/worktrees/e2e"
   git config user.email "t@t"; git config user.name "t"
   echo "change" >> repos/fakerepo/README.md
   git add . && git commit -q -m "test change"
 
-  out=$(bash "$meta/mise-tasks/push" --no-pr 2>&1); rc=$?
-  assert_exit_code 0 $rc "push --no-pr pushes touched subtrees"
+  out=$(bash "$meta/mise-tasks/push" 2>&1); rc=$?
+  assert_exit_code 0 $rc "push pushes touched subtrees"
   assert_contains "pushed fakerepo" "$out" "push reports pushed subtree"
 
   git -C "$upstream" show-ref --verify --quiet refs/heads/e2e \

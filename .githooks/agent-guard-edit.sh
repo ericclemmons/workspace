@@ -19,7 +19,7 @@ else
   abs="$(pwd)/$file_path"
 fi
 abs=$(readlink -f "$abs" 2>/dev/null \
-  || python3 -c "import os,sys;print(os.path.abspath(sys.argv[1]))" "$abs" 2>/dev/null \
+  || python3 -c "import os,sys;print(os.path.realpath(sys.argv[1]))" "$abs" 2>/dev/null \
   || echo "$abs")
 
 # Find meta repo root via git-common-dir
@@ -27,6 +27,7 @@ if ! common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
   block "Edit blocked: not inside a git repo. Edits must happen inside a worktree under <meta>/worktrees/."
 fi
 meta_root=$(dirname "$common")
+meta_root=$(cd "$meta_root" && pwd -P)
 
 # Edits must be inside a worktree
 if [[ "$abs" != "$meta_root/worktrees/"*/* ]]; then
@@ -38,7 +39,7 @@ fi
 
 # Protect meta-infrastructure even within worktrees
 case "$abs" in
-  */.githooks/*|*/AGENTS.md|*/.claude/settings.json|*/opencode.json|*/mise.toml|*/mise-tasks/*|*/.gitignore)
+  */.githooks/*|*/AGENTS.md|*/.claude/settings.json|*/opencode.json|*/mise.toml|*/hk.pkl|*/mise-tasks/*|*/.gitignore)
     block "Edit blocked: $abs is meta-repo infrastructure. Modifying it changes the rules for all agents. Ask the user to confirm and edit it themselves."
     ;;
 esac
