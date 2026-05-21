@@ -13,4 +13,4 @@ experimental = true
 HK_MISE = "1"
 
 [hooks]
-postinstall = "hk install --mise"
+postinstall = "git config --local include.path ../.gitconfig && hk install --mise"
