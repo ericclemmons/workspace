@@ -1,0 +1,21 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "1afe74289880170d0f7765ae45e972a10cb73db8",
+  "prompts": {
+    "9319f5b227be85ec": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1b4605d45ffeSDf5f8yYorLIEj",
+        "model": "openai/gpt-5.5"
+      },
+      "human_author": "Test",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 45,
+      "overriden_lines": 5
+    }
+  }
+}
