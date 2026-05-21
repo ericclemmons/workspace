@@ -41,7 +41,7 @@ section() { echo; echo "$1"; }
 fresh_meta() {
   local dir; dir=$(mktemp -d -p "$SCRATCH" meta.XXXXXX)
   local path base
-  for path in README.md AGENTS.md Brewfile mise.toml hk.pkl .gitignore opencode.json \
+  for path in README.md AGENTS.md Brewfile mise.toml hk.pkl .gitconfig .gitignore opencode.json \
               .claude .githooks mise-tasks tests repos; do
     [[ -e "$TEMPLATE_ROOT/$path" ]] || continue
     base=$(basename "$path")
@@ -75,12 +75,12 @@ run_hook() {
 test_structural() {
   section "structural"
 
-  for f in README.md AGENTS.md Brewfile mise.toml hk.pkl .gitignore \
+  for f in README.md AGENTS.md Brewfile mise.toml hk.pkl .gitconfig .gitignore \
            opencode.json .claude/settings.json \
            .githooks/pre-commit .githooks/agent-guard-edit.sh \
            .githooks/agent-guard-bash.sh .githooks/agent-guard-context.sh \
            mise-tasks/_lib mise-tasks/add mise-tasks/branch \
-           mise-tasks/pull mise-tasks/push mise-tasks/test \
+           mise-tasks/pull mise-tasks/prune mise-tasks/push mise-tasks/test \
            ; do
     [[ -f "$TEMPLATE_ROOT/$f" ]] && pass "exists: $f" || fail "exists: $f"
   done
@@ -176,6 +176,9 @@ test_agent_edit_guard() {
 
   run_hook "$hook" "{\"tool_input\":{\"file_path\":\"$meta/worktrees/feat-x/hk.pkl\"}}"
   assert_exit_code 2 "$HOOK_EXIT" "blocks edit to hk.pkl"
+
+  run_hook "$hook" "{\"tool_input\":{\"file_path\":\"$meta/worktrees/feat-x/.gitconfig\"}}"
+  assert_exit_code 2 "$HOOK_EXIT" "blocks edit to .gitconfig"
 
   # Supports both .file_path and .path
   run_hook "$hook" "{\"tool_input\":{\"path\":\"$meta/worktrees/feat-x/repos/foo.txt\"}}"
@@ -304,6 +307,29 @@ test_mise_tasks() {
   # push from main checkout rejected
   out=$(bash mise-tasks/push 2>&1 || true)
   assert_contains "run this from inside a worktree" "$out" "push rejects main checkout"
+
+  # prune removes merged local branches with deleted upstreams
+  local remote; remote=$(mktemp -d -p "$SCRATCH" remote.XXXXXX)
+  git init -q --bare "$remote"
+  git remote add origin "$remote"
+  git push -q -u origin main
+  git worktree add -q -b prune-me worktrees/prune-me
+  (
+    cd worktrees/prune-me
+    git config user.email "t@t"; git config user.name "t"
+    echo prune > repos/prune.txt
+    git add repos/prune.txt && git commit -q -m "prune me"
+  )
+  git push -q -u origin prune-me
+  META_ALLOW_COMMIT=1 git merge -q --no-ff prune-me -m "merge prune-me"
+  git push -q origin --delete prune-me
+  out=$(bash mise-tasks/prune 2>&1); rc=$?
+  assert_exit_code 0 $rc "prune removes merged gone branch"
+  [[ ! -d "$meta/worktrees/prune-me" ]] && pass "prune removed worktree" \
+    || fail "prune removed worktree"
+  git show-ref --verify --quiet refs/heads/prune-me \
+    && fail "prune deleted branch" \
+    || pass "prune deleted branch"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────

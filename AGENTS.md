@@ -48,7 +48,7 @@ If push fails with "non-fast-forward," upstream moved during your work. Same rec
 - Edits must be inside `worktrees/*/`
 - No git mutations from the meta main checkout
 - No commits or pushes on `main`
-- `.githooks/`, `AGENTS.md`, `.claude/`, `opencode.json`, `mise.toml`, `hk.pkl`, and `mise-tasks/*` are write-protected unless the user explicitly asks
+- `.githooks/`, `AGENTS.md`, `.claude/`, `opencode.json`, `mise.toml`, `hk.pkl`, `.gitconfig`, and `mise-tasks/*` are write-protected unless the user explicitly asks
 - `--no-verify` and `core.hooksPath` reconfiguration are blocked
 - `git worktree remove --force` is blocked
 

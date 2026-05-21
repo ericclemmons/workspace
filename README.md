@@ -12,11 +12,11 @@ A few thin shell scripts wrap the `git subtree` invocations so the right form is
 ## Setup
 
 ```bash
-brew bundle          # installs mise + bash 4
+brew bundle          # installs mise
 mise install         # installs jq + hk + pkl, then runs hk install --mise
 ```
 
-This uses mise's experimental postinstall hook support to run `hk install --mise`. If you already use `hk install --global` from your dotfiles, `hk install --mise` is safe; hk skips duplicate local installs when global hooks are active.
+This uses mise's experimental postinstall hook support to configure repo-local Git defaults and run `hk install --mise`. If you already use `hk install --global` from your dotfiles, `hk install --mise` is safe; hk skips duplicate local installs when global hooks are active.
 
 Then mount each upstream repo:
 
@@ -42,11 +42,10 @@ claude                          # or opencode, or your editor
 mise run push                   # detects touched subtrees, pushes branches
 
 cd ../..
-git worktree remove worktrees/jira-123
-git branch -d jira-123
+mise run prune
 ```
 
-That's three commands during a task: `branch`, `push`, and the two-step cleanup (or skip cleanup until later).
+That's three commands during a task: `branch`, `push`, and cleanup (or skip cleanup until later).
 
 ## Staying in sync
 
@@ -64,10 +63,13 @@ Run this when an upstream has moved meaningfully since your last pull. For high-
 | `add <name> <url> [branch]` | main checkout | Mount upstream as subtree at `repos/<name>/`. |
 | `branch <name>` | anywhere | Create `worktrees/<name>` on branch `<name>`. |
 | `pull [name]` | main checkout | `git subtree pull` for all subtrees, or just one. |
+| `prune` | main checkout | Remove merged local branches/worktrees whose upstream branch was deleted. |
 | `push` | worktree | Push touched subtrees to their upstream remotes. |
 | `test` | anywhere | Run the hook + task validation suite. |
 
 Run `mise tasks` to list them. All tasks fail fast with clear errors when run from the wrong context.
+
+Use `mise run prune`, not `mise prune`: `mise prune` is mise's built-in tool-version cleanup command.
 
 ## How `push` works
 
@@ -86,7 +88,7 @@ A single commit touching multiple subtrees is fine — `git subtree push` splits
 - Edits must be inside `worktrees/*/`
 - No git mutations from the main checkout
 - No commits/pushes on `main`
-- Meta-infrastructure (`.githooks/`, `AGENTS.md`, agent configs, `mise.toml`, `hk.pkl`, `mise-tasks/*`) is write-protected
+- Meta-infrastructure (`.githooks/`, `AGENTS.md`, agent configs, `mise.toml`, `hk.pkl`, `.gitconfig`, `mise-tasks/*`) is write-protected
 - `--no-verify`, `core.hooksPath` reconfiguration, and `worktree remove --force` are blocked
 
 When blocked, the agent gets a JSON `decision: "block"` with a `reason` it reads and acts on.
@@ -97,13 +99,14 @@ When blocked, the agent gets a JSON `decision: "block"` with a `reason` it reads
 .
 ├── README.md              # this file
 ├── AGENTS.md              # agent-facing workflow doc, auto-loaded by Claude/OpenCode
-├── Brewfile               # `brew bundle` → mise + bash
+├── Brewfile               # `brew bundle` → mise
 ├── mise.toml              # pinned tools and hk postinstall hook
 ├── hk.pkl                 # hk pre-commit hook configuration
+├── .gitconfig             # repo-local Git defaults included by mise install
 ├── .gitignore             # ignores /worktrees
 ├── mise-tasks/            # task scripts; filename = task name
 │   ├── _lib               # shared helpers (not a task)
-│   ├── add, branch, pull, push, test
+│   ├── add, branch, pull, prune, push, test
 ├── .githooks/
 │   ├── pre-commit
 │   └── agent-guard-{edit,bash,context}.sh
@@ -117,7 +120,7 @@ When blocked, the agent gets a JSON `decision: "block"` with a `reason` it reads
 ## Notes
 
 - The `META_ALLOW_COMMIT=1` env var bypasses pre-commit for one command. Don't `export` it.
-- Worktree cleanup is the two-step `git worktree remove worktrees/<name>` then `git branch -d <name>`. Git refuses to delete a branch with a live worktree, which enforces the order.
+- `mise run prune` cleans up local branches/worktrees after merged PR branches are deleted upstream. It only deletes branches already merged into `main`.
 - If `mise run push` is ever slow, cache subtree history once: `git subtree split --prefix=repos/<name> --rejoin` from the main checkout. Rarely needed.
 - Drop into raw git any time the tasks don't fit. The tasks are wrappers, not a separate system.
 
