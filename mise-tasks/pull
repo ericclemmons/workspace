@@ -8,6 +8,13 @@ cd "$(meta_root)"
 git diff --quiet && git diff --cached --quiet \
   || die "uncommitted changes — commit or stash first"
 
+if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+  info "pulling meta repo"
+  git pull
+else
+  warn "skipping meta repo pull — main has no upstream"
+fi
+
 target=${1:-}
 if [[ -n "$target" ]]; then
   [[ -d "repos/$target" ]] || die "no subtree: repos/$target"

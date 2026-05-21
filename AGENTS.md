@@ -60,7 +60,7 @@ When a hook blocks you, read the reason and adjust. Don't try to circumvent it.
 |---|---|---|
 | Start work | `mise run branch <name>` | `git worktree add ...` |
 | Push subtree branches | `mise run push` | manual `git subtree push` invocations |
-| Pull upstream changes | (tell user) `mise run pull` | `git subtree pull` |
+| Pull meta/subtree changes | (tell user) `mise run pull` | `git pull` + `git subtree pull` |
 
 Raw git is the right tool for everything else: `git status`, `git diff`, `git log`, `git add`, `git commit`, `git rebase`, `git checkout`.
 

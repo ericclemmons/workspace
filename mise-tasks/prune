@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Prune merged local branches whose upstream was deleted."
+#MISE description="Prune merged local branches and their worktrees."
 source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
 
 worktree_for_branch() {
@@ -25,10 +25,10 @@ git fetch --prune
 pruned=0
 while IFS='|' read -r branch upstream_state; do
   [[ "$branch" != "main" ]] || continue
-  [[ "$upstream_state" == "[gone]" ]] || continue
 
   if ! git merge-base --is-ancestor "$branch" main; then
-    warn "skipping $branch — upstream is gone, but branch is not merged into main"
+    [[ "$upstream_state" == "[gone]" ]] \
+      && warn "skipping $branch — upstream is gone, but branch is not merged into main"
     continue
   fi
 

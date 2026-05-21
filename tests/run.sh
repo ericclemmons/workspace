@@ -330,6 +330,24 @@ test_mise_tasks() {
   git show-ref --verify --quiet refs/heads/prune-me \
     && fail "prune deleted branch" \
     || pass "prune deleted branch"
+
+  # prune also removes merged local branches even if the upstream branch remains
+  git worktree add -q -b prune-kept worktrees/prune-kept
+  (
+    cd worktrees/prune-kept
+    git config user.email "t@t"; git config user.name "t"
+    echo kept > repos/prune-kept.txt
+    git add repos/prune-kept.txt && git commit -q -m "prune kept"
+  )
+  git push -q -u origin prune-kept
+  META_ALLOW_COMMIT=1 git merge -q --no-ff prune-kept -m "merge prune-kept"
+  out=$(bash mise-tasks/prune 2>&1); rc=$?
+  assert_exit_code 0 $rc "prune removes merged branch with live upstream"
+  [[ ! -d "$meta/worktrees/prune-kept" ]] && pass "prune removed live-upstream worktree" \
+    || fail "prune removed live-upstream worktree"
+  git show-ref --verify --quiet refs/heads/prune-kept \
+    && fail "prune deleted live-upstream branch" \
+    || pass "prune deleted live-upstream branch"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
