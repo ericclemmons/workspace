@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Sourced by other tasks. Not a runnable task (prefixed with _ to hide from `mise tasks`).
+set -euo pipefail
+
+if [[ -t 1 ]]; then
+  C_GREEN=$'\033[32m'; C_RED=$'\033[31m'; C_YELLOW=$'\033[33m'
+  C_BLUE=$'\033[34m'; C_DIM=$'\033[2m'; C_BOLD=$'\033[1m'; C_RESET=$'\033[0m'
+else
+  C_GREEN=""; C_RED=""; C_YELLOW=""; C_BLUE=""; C_DIM=""; C_BOLD=""; C_RESET=""
+fi
+
+info() { echo "${C_BLUE}→${C_RESET} $*"; }
+ok()   { echo "${C_GREEN}✓${C_RESET} $*"; }
+warn() { echo "${C_YELLOW}!${C_RESET} $*" >&2; }
+die()  { echo "${C_RED}✗${C_RESET} $*" >&2; exit 1; }
+
+# Meta repo root (works from worktrees too)
+meta_root() {
+  local common
+  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+    || die "not inside a git repo"
+  dirname "$common"
+}
+
+is_main_checkout() {
+  local root common
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || return 1
+  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  [[ "$root" == "$(dirname "$common")" ]]
+}
+
+require_main_checkout() {
+  is_main_checkout || die "run this from the meta main checkout, not a worktree"
+}
+
+require_worktree() {
+  is_main_checkout && die "run this from inside a worktree, not the main checkout"
+  return 0
+}
+
+# Default upstream branch for a remote
+upstream_branch() {
+  git config --get "subtree.$1.branch" 2>/dev/null || echo "main"
+}
+
+# owner/repo from a git URL (handles git@ and https)
+gh_repo_from_url() {
+  local url=${1%.git}
+  if [[ "$url" =~ ^git@[^:]+:(.+)$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+  elif [[ "$url" =~ ^https?://[^/]+/(.+)$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+  else
+    echo "$url"
+  fi
+}
+
+list_subtrees() {
+  local root; root=$(meta_root)
+  find "$root/repos" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | sort
+}

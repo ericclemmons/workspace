@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#MISE description="Create a worktree on a new branch. Usage: branch <name>"
+source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
+
+name=${1:-}
+[[ -z "$name" ]] && die "usage: mise run branch <name>"
+[[ "$name" =~ ^[a-zA-Z0-9_./-]+$ ]] || die "invalid branch name: '$name'"
+[[ "$name" != "main" ]] || die "won't create a worktree for main"
+
+cd "$(meta_root)"
+wt="worktrees/$name"
+
+if [[ -d "$wt" ]]; then
+  info "worktree already exists: $wt"
+elif git show-ref --verify --quiet "refs/heads/$name"; then
+  git worktree add -q "$wt" "$name"
+  ok "ready: $wt (existing branch)"
+else
+  git worktree add -q -b "$name" "$wt"
+  ok "ready: $wt (new branch)"
+fi
+
+echo
+echo "Next: ${C_BOLD}cd $wt${C_RESET}"

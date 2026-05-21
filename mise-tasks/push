@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+#MISE description="Push touched subtrees to upstreams and open PRs. Run from a worktree."
+source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
+
+draft=""
+make_pr=1
+for arg in "$@"; do
+  case "$arg" in
+    --draft) draft="--draft" ;;
+    --no-pr) make_pr=0 ;;
+    *) die "unknown flag: $arg" ;;
+  esac
+done
+
+require_worktree
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null) || die "detached HEAD"
+[[ "$branch" != "main" ]] || die "on main — switch to a task branch first"
+
+git diff --quiet && git diff --cached --quiet \
+  || die "uncommitted changes — commit first"
+
+base=$(git merge-base HEAD main) || die "couldn't find merge base with main"
+
+# Detect touched subtrees so we don't open empty PRs.
+mapfile -t touched < <(
+  git diff --name-only "$base" HEAD \
+    | awk -F/ '$1=="repos" && NF>1 {print $2}' | sort -u
+)
+
+[[ ${#touched[@]} -gt 0 ]] || { warn "no changes under repos/ — nothing to push"; exit 0; }
+
+info "branch: $branch"
+info "touched: ${touched[*]}"
+
+# Push everything first; failures here leave no half-opened PRs.
+for name in "${touched[@]}"; do
+  git remote get-url "$name" >/dev/null 2>&1 \
+    || die "no remote for subtree '$name' — add with: mise run add $name <url>"
+  info "pushing repos/$name → $name:$branch"
+  git subtree push --prefix="repos/$name" "$name" "$branch" \
+    || die "push failed for $name — likely upstream moved. Try: mise run pull $name, then rebase, then re-push"
+  ok "pushed $name"
+done
+
+[[ $make_pr -eq 1 ]] || { ok "pushed all branches; --no-pr requested"; exit 0; }
+command -v gh >/dev/null 2>&1 || { warn "gh missing — skipping PR creation"; exit 0; }
+
+for name in "${touched[@]}"; do
+  gh_repo=$(gh_repo_from_url "$(git remote get-url "$name")")
+  upstream=$(upstream_branch "$name")
+  info "opening PR on $gh_repo ($branch → $upstream)"
+  gh pr create --repo "$gh_repo" --base "$upstream" --head "$branch" \
+    --title "$branch" --body "Part of cross-repo work: \`$branch\`" \
+    $draft 2>&1 || warn "PR creation failed on $gh_repo — branch is pushed; open manually"
+done
+
+ok "done"

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Blocks structurally wrong commits in the meta repo.
+# Installed via: git config core.hooksPath .githooks
+set -euo pipefail
+
+# Allow privileged ops (setup script uses this for the bootstrap commit)
+[[ "${META_ALLOW_COMMIT:-}" == "1" ]] && exit 0
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "DETACHED")
+toplevel=$(git rev-parse --show-toplevel)
+
+# No direct commits on main
+if [[ "$branch" == "main" ]]; then
+  cat >&2 <<EOF
+✗ Direct commits to main are not allowed.
+
+Create a worktree on a new branch:
+  mise run branch <name>
+  cd worktrees/<name>
+EOF
+  exit 1
+fi
+
+# Commits must come from a worktree, not the main checkout.
+# Main checkout: $toplevel/.git is a directory.
+# Worktree:      $toplevel/.git is a file.
+if [[ -d "$toplevel/.git" ]]; then
+  cat >&2 <<EOF
+✗ Commits must be made from a worktree.
+
+  mise run branch <name>
+  cd worktrees/<name>
+EOF
+  exit 1
+fi
+
+exit 0

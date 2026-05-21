@@ -1,0 +1,6 @@
+# Agent meta-repo configuration.
+# Run `mise tasks` to list tasks. Run `mise install` to install pinned tools.
+
+[tools]
+jq = "latest"
+gh = "latest"

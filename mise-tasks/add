@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#MISE description="Mount an upstream repo as a subtree. Usage: add <name> <url> [branch]"
+source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
+
+name=${1:-}
+url=${2:-}
+branch=${3:-main}
+
+[[ -z "$name" || -z "$url" ]] && die "usage: mise run add <name> <url> [branch]"
+[[ "$name" =~ ^[a-zA-Z0-9_.-]+$ ]] || die "invalid name: '$name'"
+
+require_main_checkout
+cd "$(meta_root)"
+
+git diff --quiet && git diff --cached --quiet \
+  || die "uncommitted changes — commit or stash first"
+[[ ! -d "repos/$name" ]] || die "repos/$name already exists"
+
+if git remote get-url "$name" >/dev/null 2>&1; then
+  [[ "$(git remote get-url "$name")" == "$url" ]] \
+    || die "remote '$name' exists with different URL"
+else
+  git remote add "$name" "$url"
+fi
+
+[[ "$branch" != "main" ]] && git config "subtree.$name.branch" "$branch"
+
+info "fetching $name/$branch"
+git fetch -q "$name" "$branch"
+info "adding subtree repos/$name"
+git subtree add --prefix="repos/$name" "$name" "$branch" --squash
+ok "added repos/$name (tracking $name/$branch)"

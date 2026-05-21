@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#MISE description="Run the hook + task validation suite."
+exec bash "${MISE_TASK_DIR:-$(dirname "$0")}/../tests/run.sh" "$@"

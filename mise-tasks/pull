@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+#MISE description="Pull subtrees from upstreams. Usage: pull [name]"
+source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
+
+require_main_checkout
+cd "$(meta_root)"
+
+git diff --quiet && git diff --cached --quiet \
+  || die "uncommitted changes — commit or stash first"
+
+target=${1:-}
+if [[ -n "$target" ]]; then
+  [[ -d "repos/$target" ]] || die "no subtree: repos/$target"
+  subtrees=("$target")
+else
+  mapfile -t subtrees < <(list_subtrees)
+fi
+
+[[ ${#subtrees[@]} -gt 0 ]] || { warn "no subtrees mounted"; exit 0; }
+
+for name in "${subtrees[@]}"; do
+  git remote get-url "$name" >/dev/null 2>&1 \
+    || { warn "skipping repos/$name — no remote"; continue; }
+  branch=$(upstream_branch "$name")
+  info "pulling $name ($branch)"
+  git subtree pull --prefix="repos/$name" "$name" "$branch" --squash \
+    || die "pull failed for $name — resolve conflicts and commit, then re-run"
+done
+ok "done"

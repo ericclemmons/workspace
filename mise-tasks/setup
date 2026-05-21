@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+#MISE description="Configure hooks and verify tooling. Idempotent."
+source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
+
+root=$(meta_root)
+cd "$root"
+
+info "checking tools"
+for t in git jq; do
+  command -v "$t" >/dev/null 2>&1 && ok "$t" || warn "$t missing"
+done
+command -v gh >/dev/null 2>&1 || warn "gh missing — \`mise run push\` will skip PR creation"
+
+current=$(git config --get core.hooksPath 2>/dev/null || echo "")
+if [[ "$current" != ".githooks" ]]; then
+  git config core.hooksPath .githooks
+  ok "core.hooksPath = .githooks"
+else
+  ok "core.hooksPath already .githooks"
+fi
+
+chmod +x .githooks/*.sh .githooks/pre-commit mise-tasks/* 2>/dev/null || true
+
+if ! git rev-parse HEAD >/dev/null 2>&1; then
+  git add -A
+  META_ALLOW_COMMIT=1 git commit -q -m "scaffold"
+  ok "bootstrap commit created"
+fi
+
+ok "ready"
