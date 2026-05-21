@@ -1,0 +1,31 @@
+AGENTS.md
+  9319f5b227be85ec 63
+tests/run.sh
+  9319f5b227be85ec 83,311,326-329,331-332,334,344-347,349-350
+tests/README.md
+  9319f5b227be85ec 21
+mise-tasks/pull
+  9319f5b227be85ec 2,5-44,58
+README.md
+  9319f5b227be85ec 45,57,65,106,120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "a83e1e2f1c22c02953df812daeef3c0ceff0d723",
+  "prompts": {
+    "9319f5b227be85ec": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1b4605d45ffeSDf5f8yYorLIEj",
+        "model": "openai/gpt-5.5"
+      },
+      "human_author": "t",
+      "messages": [],
+      "total_additions": 65,
+      "total_deletions": 73,
+      "accepted_lines": 65,
+      "overriden_lines": 0
+    }
+  }
+}
