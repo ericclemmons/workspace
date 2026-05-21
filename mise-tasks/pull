@@ -13,7 +13,10 @@ if [[ -n "$target" ]]; then
   [[ -d "repos/$target" ]] || die "no subtree: repos/$target"
   subtrees=("$target")
 else
-  mapfile -t subtrees < <(list_subtrees)
+  subtrees=()
+  while IFS= read -r name; do
+    subtrees+=("$name")
+  done < <(list_subtrees)
 fi
 
 [[ ${#subtrees[@]} -gt 0 ]] || { warn "no subtrees mounted"; exit 0; }
