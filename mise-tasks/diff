@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+#MISE description="Show aggregated diffs for repos in a task worktree. Usage: diff [repo...] [-- git-diff-args...]"
+source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
+
+require_task_root
+task=$(task_root)
+branch=$(task_name)
+
+repos=()
+diff_args=()
+parsing_repos=1
+for arg in "$@"; do
+  if [[ "$arg" == "--" ]]; then
+    parsing_repos=0
+    continue
+  fi
+  if [[ $parsing_repos -eq 1 ]]; then
+    repos+=("$arg")
+  else
+    diff_args+=("$arg")
+  fi
+done
+
+if [[ ${#repos[@]} -eq 0 ]]; then
+  while IFS= read -r repo; do repos+=("$repo"); done < <(list_task_repos)
+fi
+
+[[ ${#repos[@]} -gt 0 ]] || die "no repo worktrees found in worktrees/$branch"
+
+for repo in "${repos[@]}"; do
+  validate_name "repo" "$repo"
+  wt="$task/$repo"
+  [[ -d "$wt/.git" || -f "$wt/.git" ]] || die "worktrees/$branch/$repo is not a git repo"
+  echo
+  info "diff: $repo"
+  if [[ ${#diff_args[@]} -gt 0 ]]; then
+    git -C "$wt" diff "${diff_args[@]}"
+  else
+    git -C "$wt" diff
+  fi
+done
