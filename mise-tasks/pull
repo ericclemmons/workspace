@@ -1,12 +1,61 @@
 #!/usr/bin/env bash
-#MISE description="Pull subtrees from upstreams. Usage: pull [name]"
+#MISE description="Pull meta repo, prune merged worktrees, then pull subtrees. Usage: pull [name]"
 source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
+
+worktree_for_branch() {
+  local branch=$1 path="" line
+  while IFS= read -r line; do
+    case "$line" in
+      worktree\ *) path=${line#worktree } ;;
+      "branch refs/heads/$branch") echo "$path"; return 0 ;;
+      "") path="" ;;
+    esac
+  done < <(git worktree list --porcelain)
+}
+
+prune_merged_gone_branches() {
+  local pruned=0 branch upstream_state wt
+
+  info "pruning deleted remote branches"
+  git fetch --prune
+
+  while IFS='|' read -r branch upstream_state; do
+    [[ "$branch" != "main" ]] || continue
+    [[ "$upstream_state" == "[gone]" ]] || continue
+
+    if ! git merge-base --is-ancestor "$branch" main; then
+      warn "skipping $branch — upstream is gone, but branch is not merged into main"
+      continue
+    fi
+
+    wt=$(worktree_for_branch "$branch")
+    if [[ -n "$wt" ]]; then
+      info "removing worktree $wt"
+      git worktree remove "$wt" || die "failed to remove worktree for $branch"
+    fi
+
+    info "deleting branch $branch"
+    git branch -d "$branch"
+    pruned=$((pruned + 1))
+  done < <(git for-each-ref --format='%(refname:short)|%(upstream:track)' refs/heads)
+
+  [[ $pruned -gt 0 ]] && ok "pruned $pruned branch(es)" || warn "no branches to prune"
+}
 
 require_main_checkout
 cd "$(meta_root)"
 
 git diff --quiet && git diff --cached --quiet \
   || die "uncommitted changes — commit or stash first"
+
+if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+  info "pulling meta repo"
+  git pull
+else
+  warn "skipping meta repo pull — main has no upstream"
+fi
+
+prune_merged_gone_branches
 
 target=${1:-}
 if [[ -n "$target" ]]; then

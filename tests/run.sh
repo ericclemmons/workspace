@@ -80,7 +80,7 @@ test_structural() {
            .githooks/pre-commit .githooks/agent-guard-edit.sh \
            .githooks/agent-guard-bash.sh .githooks/agent-guard-context.sh \
            mise-tasks/_lib mise-tasks/add mise-tasks/branch \
-           mise-tasks/pull mise-tasks/prune mise-tasks/push mise-tasks/test \
+           mise-tasks/pull mise-tasks/push mise-tasks/test \
            ; do
     [[ -f "$TEMPLATE_ROOT/$f" ]] && pass "exists: $f" || fail "exists: $f"
   done
@@ -308,7 +308,7 @@ test_mise_tasks() {
   out=$(bash mise-tasks/push 2>&1 || true)
   assert_contains "run this from inside a worktree" "$out" "push rejects main checkout"
 
-  # prune removes merged local branches with deleted upstreams
+  # pull prunes merged local branches with deleted upstreams
   local remote; remote=$(mktemp -d -p "$SCRATCH" remote.XXXXXX)
   git init -q --bare "$remote"
   git remote add origin "$remote"
@@ -323,13 +323,31 @@ test_mise_tasks() {
   git push -q -u origin prune-me
   META_ALLOW_COMMIT=1 git merge -q --no-ff prune-me -m "merge prune-me"
   git push -q origin --delete prune-me
-  out=$(bash mise-tasks/prune 2>&1); rc=$?
-  assert_exit_code 0 $rc "prune removes merged gone branch"
-  [[ ! -d "$meta/worktrees/prune-me" ]] && pass "prune removed worktree" \
-    || fail "prune removed worktree"
+  out=$(bash mise-tasks/pull 2>&1); rc=$?
+  assert_exit_code 0 $rc "pull prunes merged gone branch"
+  [[ ! -d "$meta/worktrees/prune-me" ]] && pass "pull removed pruned worktree" \
+    || fail "pull removed pruned worktree"
   git show-ref --verify --quiet refs/heads/prune-me \
-    && fail "prune deleted branch" \
-    || pass "prune deleted branch"
+    && fail "pull deleted pruned branch" \
+    || pass "pull deleted pruned branch"
+
+  # pull keeps merged local branches when the upstream branch remains
+  git worktree add -q -b prune-kept worktrees/prune-kept
+  (
+    cd worktrees/prune-kept
+    git config user.email "t@t"; git config user.name "t"
+    echo kept > repos/prune-kept.txt
+    git add repos/prune-kept.txt && git commit -q -m "prune kept"
+  )
+  git push -q -u origin prune-kept
+  META_ALLOW_COMMIT=1 git merge -q --no-ff prune-kept -m "merge prune-kept"
+  out=$(bash mise-tasks/pull 2>&1); rc=$?
+  assert_exit_code 0 $rc "pull keeps merged branch with live upstream"
+  [[ -d "$meta/worktrees/prune-kept" ]] && pass "pull kept live-upstream worktree" \
+    || fail "pull kept live-upstream worktree"
+  git show-ref --verify --quiet refs/heads/prune-kept \
+    && pass "pull kept live-upstream branch" \
+    || fail "pull kept live-upstream branch"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
