@@ -1,0 +1,23 @@
+.opencode/plugin/mcp-access-guards.js
+  2207b7fc9ccbb914 79,85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "e43efcdc4a8d276458c8510e995c13f45a3a64f7",
+  "prompts": {
+    "2207b7fc9ccbb914": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1b2f25786ffeC1LaxBtR57Qbv7",
+        "model": "openai/gpt-5.5"
+      },
+      "human_author": "t",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 6,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    }
+  }
+}
