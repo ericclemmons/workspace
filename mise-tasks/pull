@@ -27,6 +27,8 @@ if [[ ${#repos[@]} -eq 0 ]]; then
   exit 0
 fi
 
+base_paths=()
+defaults=()
 for repo in "${repos[@]}"; do
   validate_name "repo" "$repo"
   base="$root/repos/$repo"
@@ -34,10 +36,44 @@ for repo in "${repos[@]}"; do
   repo_clean "$base" || die "repos/$repo has uncommitted changes; base repos must stay clean"
 
   default=$(repo_default_branch "$base")
+  base_paths+=("$base")
+  defaults+=("$default")
+done
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+pull_repo() {
+  local repo=$1 base=$2 default=$3
   info "pulling $repo ($default)"
   git -C "$base" fetch --prune origin
   git -C "$base" switch -q "$default"
   git -C "$base" pull --ff-only origin "$default"
+  ok "pulled $repo"
+}
+
+pids=()
+outputs=()
+for i in "${!repos[@]}"; do
+  repo=${repos[$i]}
+  out="$tmp/$repo.out"
+  pull_repo "$repo" "${base_paths[$i]}" "${defaults[$i]}" >"$out" 2>&1 &
+  pids+=("$!")
+  outputs+=("$out")
 done
+
+failed=0
+for i in "${!pids[@]}"; do
+  if wait "${pids[$i]}"; then
+    cat "${outputs[$i]}"
+  else
+    rc=$?
+    cat "${outputs[$i]}" >&2
+    warn "${repos[$i]} failed with exit $rc"
+    failed=1
+  fi
+done
+
+[[ $failed -eq 0 ]] || die "one or more repos failed to pull"
 
 ok "done"
