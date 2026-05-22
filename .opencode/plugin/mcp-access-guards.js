@@ -47,20 +47,17 @@ function gitSourceGuidance(value) {
   const host = url.hostname.toLowerCase()
   const segments = cleanSegments(url.pathname)
   let repoPath = ""
-  let branch = ""
   let filePath = ""
 
   if (host === "raw.githubusercontent.com") {
     if (segments.length < 3) return null
     repoPath = `${segments[0]}/${segments[1]}`
-    branch = segments[2]
     filePath = segments.slice(3).join("/")
   } else if (host === "github.com" || host.endsWith(".github.com")) {
     if (segments.length < 2) return null
     repoPath = `${segments[0]}/${segments[1]}`
     const marker = segments.findIndex((segment) => segment === "blob" || segment === "raw")
     if (marker >= 0) {
-      branch = segments[marker + 1] ?? ""
       filePath = segments.slice(marker + 2).join("/")
     }
   } else if (host.includes("gitlab")) {
@@ -69,7 +66,6 @@ function gitSourceGuidance(value) {
     repoPath = segments.slice(0, marker).join("/")
     const kind = segments[marker + 1]
     if (kind === "raw" || kind === "blob") {
-      branch = segments[marker + 2] ?? ""
       filePath = segments.slice(marker + 3).join("/")
     }
   } else {
@@ -80,13 +76,13 @@ function gitSourceGuidance(value) {
 
   const repoName = repoNameFromPath(repoPath)
   const remote = `git@${host}:${repoPath}.git`
-  const addCommand = ["mise", "run", "add", repoName, remote, branch].filter(Boolean).map(shellQuote).join(" ")
+  const addCommand = ["mise", "run", "add", repoName, remote].map(shellQuote).join(" ")
   const localPath = filePath ? `repos/${repoName}/${filePath}` : `repos/${repoName}`
 
   return (
     "Do not use WebFetch for GitHub/GitLab repository content. " +
     `Clone the repo into this workspace and inspect it locally instead: \`${addCommand}\`, ` +
-    `then read \`${localPath}\`. ` +
+    `then read \`${localPath}\` from the default branch. ` +
     "If you need an isolated task branch after adding the repo, run `mise run branch <task> <repo>` and work under `worktrees/<task>/<repo>/`."
   )
 }
