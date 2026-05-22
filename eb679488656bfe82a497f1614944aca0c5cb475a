@@ -1,0 +1,25 @@
+.opencode/skills/mcp-access/SKILL.md
+  2207b7fc9ccbb914 1-66
+.opencode/plugin/mcp-access-guards.js
+  2207b7fc9ccbb914 1-153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "eb679488656bfe82a497f1614944aca0c5cb475a",
+  "prompts": {
+    "2207b7fc9ccbb914": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1b2f25786ffeC1LaxBtR57Qbv7",
+        "model": "openai/gpt-5.5"
+      },
+      "human_author": "t",
+      "messages": [],
+      "total_additions": 219,
+      "total_deletions": 0,
+      "accepted_lines": 219,
+      "overriden_lines": 0
+    }
+  }
+}
