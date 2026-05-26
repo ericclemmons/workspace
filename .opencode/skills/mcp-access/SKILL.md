@@ -1,15 +1,15 @@
 ---
 name: mcp-access
-description: Use for Jira, Confluence, Google Chat, Gmail, Google Calendar, Google Drive, Google Docs, Google Workspace, Cloudflare Access, cf-portal, or atlassian access; requires MCP tools instead of WebFetch and includes auth refresh steps.
+description: Use for MCP status checks, MCP setup, MCP authentication, Jira, Confluence, Google Chat, Gmail, Google Calendar, Google Drive, Google Docs, Google Workspace, Cloudflare Access, cf-portal, or atlassian access; requires MCP tools instead of WebFetch and includes auth refresh steps.
 ---
 
 # MCP Access
 
-Use MCP tools for all authenticated work. Do not use WebFetch for Jira, Confluence, Google Chat, Gmail, Google Calendar, Drive, Docs, Sheets, Slides, Forms, Cloudflare internal pages, or any Cloudflare Access-protected URL. WebFetch cannot satisfy Cloudflare Access and usually returns an auth wall or unusable content.
+Use MCP tools for all authenticated work and for requests to check, set up, or repair MCP access. Do not use WebFetch for Jira, Confluence, Google Chat, Gmail, Google Calendar, Drive, Docs, Sheets, Slides, Forms, Cloudflare internal pages, or any Cloudflare Access-protected URL. WebFetch cannot satisfy Cloudflare Access and usually returns an auth wall or unusable content.
 
 ## Preflight
 
-Before authenticated Atlassian, Google Workspace, or Cloudflare internal work, run:
+Before authenticated Atlassian, Google Workspace, Cloudflare internal work, or any generic MCP status/setup request, run:
 
 ```sh
 opencode mcp list
@@ -19,6 +19,7 @@ Expected healthy state:
 
 - `cf-portal` is `connected (OAuth)`.
 - `atlassian` is `connected`.
+- Other enabled MCPs needed for the task are `connected`.
 
 If `cf-portal` is disconnected, expired, unauthorized, or tools fail with auth errors, run:
 
