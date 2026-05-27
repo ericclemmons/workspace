@@ -253,6 +253,11 @@ test_end_to_end() {
   upstream=$(fake_upstream fakerepo)
 
   bash mise-tasks/add fakerepo "$upstream" >/dev/null
+  bash mise-tasks/branch clean-only >/dev/null
+  out=$(bash mise-tasks/clean clean-only 2>&1); rc=$?
+  assert_exit_code 0 $rc "clean removes clean task worktrees"
+  [[ ! -e "$meta/worktrees/clean-only/fakerepo" ]] && pass "clean removed repo worktree" || fail "clean removed repo worktree"
+
   bash mise-tasks/branch e2e >/dev/null
   cd worktrees/e2e/fakerepo
   git config user.email "t@t"
@@ -272,6 +277,8 @@ test_end_to_end() {
   git -C "$seed" config user.email "u@u"
   git -C "$seed" config user.name "Upstream"
   git -C "$seed" switch -q main
+  git -C "$seed" fetch -q origin e2e
+  git -C "$seed" merge -q --ff-only origin/e2e
   echo upstream >> "$seed/README.md"
   git -C "$seed" add README.md
   git -C "$seed" commit -q -m upstream
@@ -281,10 +288,7 @@ test_end_to_end() {
   out=$(bash mise-tasks/pull fakerepo 2>&1); rc=$?
   assert_exit_code 0 $rc "pull fast-forwards base repo"
   git -C repos/fakerepo log --oneline -1 | grep -q upstream && pass "base repo received upstream commit" || fail "base repo received upstream commit"
-
-  out=$(bash mise-tasks/clean e2e 2>&1); rc=$?
-  assert_exit_code 0 $rc "clean removes clean task worktrees"
-  [[ ! -e "$meta/worktrees/e2e/fakerepo" ]] && pass "clean removed repo worktree" || fail "clean removed repo worktree"
+  [[ ! -e "$meta/worktrees/e2e/fakerepo" ]] && pass "pull removed merged repo worktree" || fail "pull removed merged repo worktree"
 }
 
 echo "agent-workspace tests"

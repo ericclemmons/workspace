@@ -52,6 +52,53 @@ pull_repo() {
   ok "pulled $repo"
 }
 
+branch_was_pushed() {
+  local wt=$1 branch=$2
+  git -C "$wt" config --get "branch.$branch.remote" >/dev/null 2>&1 \
+    || git -C "$wt" show-ref --verify --quiet "refs/remotes/origin/$branch"
+}
+
+task_repo_merged() {
+  local wt=$1 base=$2 branch default target
+  repo_clean "$wt" || return 1
+  branch=$(git -C "$wt" symbolic-ref --short HEAD 2>/dev/null) || return 1
+  branch_was_pushed "$wt" "$branch" || return 1
+  default=$(repo_default_branch "$base")
+  target="refs/remotes/origin/$default"
+  git -C "$base" show-ref --verify --quiet "$target" || return 1
+  git -C "$wt" merge-base --is-ancestor HEAD "$target"
+}
+
+cleanup_merged_tasks() {
+  local task repo name base found can_clean
+  [[ -d "$root/worktrees" ]] || return 0
+
+  for task in "$root"/worktrees/*; do
+    [[ -d "$task" ]] || continue
+    [[ -d "$task/.git" || -f "$task/.git" ]] && continue
+
+    found=0
+    can_clean=1
+    for repo in "$task"/*; do
+      [[ -d "$repo/.git" || -f "$repo/.git" ]] || continue
+      found=1
+      name=$(basename "$repo")
+      base="$root/repos/$name"
+      [[ -d "$base/.git" || -f "$base/.git" ]] || { can_clean=0; break; }
+      task_repo_merged "$repo" "$base" || { can_clean=0; break; }
+    done
+
+    [[ $found -eq 1 && $can_clean -eq 1 ]] || continue
+    for repo in "$task"/*; do
+      [[ -d "$repo/.git" || -f "$repo/.git" ]] || continue
+      name=$(basename "$repo")
+      info "removing merged worktree $(basename "$task")/$name"
+      git -C "$root/repos/$name" worktree remove "$repo"
+    done
+    rmdir "$task" 2>/dev/null || warn "worktrees/$(basename "$task") is not empty; left it in place"
+  done
+}
+
 pids=()
 outputs=()
 for i in "${!repos[@]}"; do
@@ -75,5 +122,7 @@ for i in "${!pids[@]}"; do
 done
 
 [[ $failed -eq 0 ]] || die "one or more repos failed to pull"
+
+cleanup_merged_tasks
 
 ok "done"
