@@ -21,11 +21,13 @@ Expected healthy state:
 - `atlassian` is `connected`.
 - Other enabled MCPs needed for the task are `connected`.
 
-If `cf-portal` is disconnected, expired, unauthorized, or tools fail with auth errors, run:
+If `cf-portal` is disconnected, expired, unauthorized, or tools fail with auth errors and no valid credentials are present, run:
 
 ```sh
 opencode mcp auth cf-portal
 ```
+
+`opencode mcp auth cf-portal` is interactive when credentials already exist: it prompts whether to re-authenticate and blocks unattended agent work. If `opencode mcp list` shows cf-portal has credentials but the session is expired or invalid, do not run `opencode mcp auth cf-portal` directly. First ask the user to log out/disconnect cf-portal from `/mcp` or otherwise clear the existing OAuth credentials, then run auth again.
 
 After auth completes, re-check with `opencode mcp list`. If tools are still unavailable in the current OpenCode session, tell the user to run `/mcp` and reconnect/reload MCP servers, or quit and restart OpenCode. This is expected because cf-portal credentials expire several times a day.
 
@@ -51,9 +53,10 @@ Use cf-portal codemode for Cloudflare-hosted MCP servers and Google Workspace:
 If an MCP call fails:
 
 1. Check whether it is an auth or connection failure.
-2. For cf-portal auth failures, run `opencode mcp auth cf-portal` and retry once.
-3. If retry still fails, ask the user to reconnect from `/mcp` or restart OpenCode.
-4. Do not fall back to WebFetch for Cloudflare Access-protected content.
+2. For cf-portal auth failures with no existing credentials, run `opencode mcp auth cf-portal` and retry once.
+3. For cf-portal auth failures with existing credentials, ask the user to log out/disconnect cf-portal first because `opencode mcp auth cf-portal` is interactive in that state.
+4. If retry still fails, ask the user to reconnect from `/mcp` or restart OpenCode.
+5. Do not fall back to WebFetch for Cloudflare Access-protected content.
 
 ## Current Evaluation
 
