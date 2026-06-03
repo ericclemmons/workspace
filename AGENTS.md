@@ -13,6 +13,22 @@ Agents should do repo work only inside `worktrees/<task>/<repo>/`. Never edit, c
 
 ## Workflow
 
+### 0. Discover Repos
+
+```bash
+mise run list
+```
+
+This shows the repos already supported by the workspace and existing task worktrees. Check this before cloning anything outside the workspace.
+
+If a needed repo is not listed, add it to the workspace instead of cloning it manually:
+
+```bash
+mise run add workers-sdk git@github.com:cloudflare/workers-sdk.git
+```
+
+Use the repo name that should appear under `repos/<repo>`. The add task creates the base clone under `repos/` and records the default branch for future task stripes.
+
 ### 1. Sync
 
 ```bash
@@ -67,12 +83,12 @@ This removes clean repo worktrees for the task.
 | Goal | Use |
 |---|---|
 | Add a repo clone | `mise run add <name> <url> [branch]` |
+| List repos and tasks | `mise run list` |
 | Pull workspace and base repos | `mise run pull [repo...]` |
 | Create a task stripe | `mise run branch <task> [repo...]` |
 | Aggregate status | `mise run status [repo...]` |
 | Aggregate diff | `mise run diff [repo...]` |
 | Push task branches | `mise run push [repo...]` |
 | Remove clean task worktrees | `mise run clean <task>` |
-| List repos and tasks | `mise run list` |
 
 Raw Git is fine inside `worktrees/<task>/<repo>`. Prefer mise tasks for cross-repo operations.
