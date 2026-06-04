@@ -21,6 +21,10 @@ mise run list
 
 This shows the repos already supported by the workspace and existing task worktrees. Check this before cloning anything outside the workspace.
 
+Prefer local clones for repository inspection and search. If a GitLab/GitHub repo is needed for code search, CODEOWNERS lookup, or MR investigation and it is not listed, add it with `mise run add <name> <url> [branch]` and search the local clone instead of using `glab api` for broad repository scans. Use API calls for metadata, MR state, approvals, comments, or small targeted lookups where local files are not enough.
+
+For internal GitLab repos, derive the SSH URL directly from the project URL when possible. For example, `https://gitlab.cfdata.org/cloudflare/backstage/backstage` becomes `git@gitlab.cfdata.org:cloudflare/backstage/backstage.git`, then add it with `mise run add backstage git@gitlab.cfdata.org:cloudflare/backstage/backstage.git`. If the repo path is unknown, use GitLab project search only to identify the repo and its `ssh_url_to_repo`, for example `glab api 'projects?search=backstage&simple=true&per_page=100'` or `glab api 'groups/cloudflare/projects?search=backstage&include_subgroups=true&simple=true&per_page=100'`. Then run `mise run add <name> <ssh_url_to_repo>` and search the local clone; do not use `glab api` for code/content searches.
+
 If a needed repo is not listed, add it to the workspace instead of cloning it manually:
 
 ```bash
