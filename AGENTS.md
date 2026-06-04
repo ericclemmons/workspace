@@ -78,6 +78,32 @@ This removes clean repo worktrees for the task.
 - Workspace commits must not include `repos/*` or `worktrees/*`.
 - `--no-verify`, `core.hooksPath` reconfiguration, and `git worktree remove --force` are blocked.
 
+## Merge Requests
+
+- Do not create a branch unless the user asks for code changes that need one. For documentation-only workspace updates, edit the workspace file directly unless asked to branch or commit.
+- Before creating an MR, inspect `git status`, `git diff`, recent commits, and the target branch diff. Stage only intended files.
+- Use `glab mr create` or `glab mr update` directly for GitLab MRs.
+- Create GitLab MRs as drafts first with `glab mr create --draft ...` unless the user explicitly asks for a ready MR.
+- MR descriptions must be concise and product-focused. Avoid generated summaries or long implementation notes unless the user explicitly asks for them.
+- Use the standard multiline MR format when creating or updating MRs. Do not collapse it to one line unless the user explicitly asks for a one-line description.
+- Describe the customer/product outcome, not just the code change.
+- If a changeset is supported, use the same concise product-focused format as the MR description.
+- Do not pass escaped newlines like `\n` in `glab --description` values. This renders literal `\n` text in GitLab.
+- For multiline MR descriptions, prefer `glab api` with a temporary markdown file: `glab api projects/:fullpath/merge_requests/<iid> -X PUT -F description=@/path/to/description.md`. This preserves real newlines.
+- For one-line descriptions only, direct `glab mr create --description "Before, ...; now, ..."` or `glab mr update <id> --description "Before, ...; now, ..."` is acceptable.
+
+Preferred MR description format:
+
+```text
+Before, <users/customers/system> could not <problem>; now, <users/customers/system> can <restored or new behavior>.
+```
+
+Example:
+
+```text
+Before, customers with large Pages projects could see valid custom domains incorrectly marked as missing; now, they can list and manage custom domains beyond the first 500 MHS records again.
+```
+
 ## Mise Tasks
 
 | Goal | Use |
