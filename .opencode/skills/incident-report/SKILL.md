@@ -86,7 +86,8 @@ Use this audit to avoid duplicating work already done by the user and to focus e
 - Do not embed screenshots of Google Chat chrome unless the report specifically needs visual proof of a conversation. Chat UI screenshots are conversation evidence only, never metric evidence.
 - Screenshots must show the evidence itself, not a Chat message that merely references the evidence. For example, embed the Grafana recovery graph, not a GChat screenshot saying latency returned to normal.
 - Do not reuse the same screenshot across multiple sections unless it directly supports each section and no better evidence exists. If reuse is necessary, keep the surrounding text specific to that section.
-- If a related incident report is provided or discovered, compare its evidence choices before finalizing this report. Reuse the evidence pattern only when the failure mode is similar; otherwise explain why a different graph/table/quote is better.
+- If a related incident report is provided or discovered, compare its evidence choices before finalizing this report. Reuse the evidence pattern only when the failure mode is similar; otherwise explain why a different graph/table/quote is better in your final response or working notes, not in the report body.
+- Never include assistant/meta justification in the incident report body about why a screenshot, graph, table, or quote was or was not used. The report should state incident facts and remaining incident work only. For example, write `The SLO error-budget impact still needs to be calculated from the SLO dashboard`, not `No SLO screenshot is included because...`.
 
 ## Jira Field Rules
 
@@ -186,14 +187,16 @@ Do not use the browser fallback to bypass the template rules. It is only an auth
 ## Google Chat Screenshot Workflow
 
 - Use cf-portal Google Chat tools to discover relevant messages and candidate images.
-- Google Chat attachment URLs returned by APIs may resolve to HTML auth pages when downloaded from shell.
+- When Google Chat MCP or the Chat DOM shows attachment metadata, tell the user what was found and keep working to recover the actual data/image/graph. Do not conclude that images are unavailable merely because an API URL, shell download, canvas export, or first browser attempt fails.
+- Google Chat attachment URLs returned by APIs are authenticated browser resources. Do not download them with shell tools such as `curl`; they commonly resolve to HTML auth pages outside the browser session.
 - For actual image bytes, use `agent-browser --headed` when needed and ask the user to complete SSO in the headed browser.
 - Use named browser sessions for Chat/Wiki work so SSO state can be reused during the same task. Chat and Wiki may require separate SSO interactions even when MCP authentication is healthy.
 - After opening a headed browser for SSO, stop and wait until the user confirms they are fully inside the target app. Then verify the current URL/title before capturing or downloading anything.
-- Prefer original Google Chat image attachments over page screenshots. Open the image preview, click `Download`, then copy the newest completed PNG from `~/Downloads` to a stable filename.
+- Prefer original Google Chat image attachments over page screenshots. Use `agent-browser screenshot --annotate` to find attachment buttons such as `Image, image.png`, click the attachment to open the preview dialog, click the preview dialog's `Download` button, then copy the newest completed PNG from `~/Downloads` to a stable filename.
+- The successful browser UI path is: open `https://chat.google.com/app/chat/<space-id>/topic/<thread-id>/message/<message-id>`, verify the page title is Chat, run `agent-browser screenshot --annotate`, click the specific image attachment ref, run another annotated screenshot if needed, click `Download`, wait for completion, then verify the downloaded file with `file` before upload.
 - If legacy `https://chat.google.com/room/...` links redirect to sign-in or lose auth, try the internal route form after the browser is signed in: `https://chat.google.com/app/chat/<space-id>/topic/<thread-id>/message/<message-id>`.
 - If a Chat attachment is a screenshot of a graph or dashboard, open/download the actual attachment image. Do not replace it with a browser screenshot of the surrounding Chat UI unless the Chat conversation itself is the evidence being documented.
-- If the image is visible in the authenticated browser but the download flow is unreliable, extract the rendered attachment image URL from the DOM and fetch the image bytes from the authenticated browser context when feasible.
+- If the image is visible in the authenticated browser but the preview download flow is unreliable, report the issue and continue trying browser-authenticated alternatives: re-open the image preview, use the preview `Download` button, inspect refs again, try the internal Chat route, or use browser-supported download behavior. Only use browser-authenticated extraction paths for Chat images.
 - Verify every downloaded file with `file`. Do not upload HTML auth pages.
 
 ## Attachment Upload Fallback
