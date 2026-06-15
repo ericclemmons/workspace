@@ -1,6 +1,6 @@
 ---
 name: babysit
-description: Use when asked to babysit, monitor, or follow up on a GitLab MR/GitHub PR after pushing; prioritize new OpenCode AI review comments before pipelines.
+description: Use when asked to babysit, monitor, or follow up on a GitLab MR/GitHub PR after pushing; delegate polling to a sub-agent and prioritize new OpenCode AI review comments before pipelines.
 ---
 
 # Babysit MR/PR
@@ -8,6 +8,22 @@ description: Use when asked to babysit, monitor, or follow up on a GitLab MR/Git
 Use this skill when the user asks to babysit, monitor, or follow up on a GitLab MR or GitHub PR, especially after pushing commits or addressing review feedback.
 
 The goal is to leave the MR/PR in a stable handoff state: fresh AI review feedback has zero findings and zero recommended changes, required CI is green or externally blocked, and flaky checks are understood.
+
+## Delegation Model
+
+Babysitting is polling-heavy and should not pollute the main conversation context.
+
+When this skill is loaded in the main agent, immediately delegate the monitoring loop to a sub-agent using the `task` tool unless the user explicitly asks you to perform each poll inline. Use a prompt that includes:
+
+- The MR/PR URL, number, or branch to monitor.
+- The priority order from this skill.
+- A requirement to poll every 10 seconds for fresh OpenCode review feedback on the latest commit before checking CI.
+- A requirement to make code fixes when valid review or CI failures are found, run focused verification, commit, and push.
+- A requirement to return only concise status summaries to the main agent: actionable findings, fixes pushed, success state, or external blockers.
+
+While the sub-agent is running, the main agent should not duplicate polling. Wait for the sub-agent result or continue only with unrelated user work. If the sub-agent reports actionable code changes are needed and did not already make them, the main agent should decide whether to implement directly or resume/delegate the sub-agent with the specific fix instructions.
+
+If this skill is loaded inside a sub-agent, run the monitoring loop directly and keep intermediate output concise. Do not return raw API payloads unless they are necessary to explain a blocker.
 
 ## Priority Order
 
@@ -87,3 +103,5 @@ Before final response, confirm:
 - Local branch status is clean and pushed.
 
 Final response should include the MR/PR URL, latest commit, AI review state, CI state, and any remaining blocker.
+
+When a sub-agent performed the babysitting, the main agent final response should summarize the sub-agent result rather than replaying the polling log.
