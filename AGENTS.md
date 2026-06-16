@@ -99,14 +99,32 @@ This removes clean repo worktrees for the task.
 
 Preferred MR description format:
 
-```text
-Before, <users/customers/system> could not <problem>; now, <users/customers/system> can <restored or new behavior>.
+```markdown
+**tl;dr – <what this does>**
+
+<why this is needed>
+
+<resulting behavior or customer/product outcome>
+
+---
+
+References: <links or issue references>
 ```
+
+Use inline backticks for code identifiers, alert names, receivers, config keys, statuses, commands, and similarly exact values. Use markdown links for URLs when a short label is clearer than a raw URL.
 
 Example:
 
-```text
-Before, customers with large Pages projects could see valid custom domains incorrectly marked as missing; now, they can list and manage custom domains beyond the first 500 MHS records again.
+```markdown
+**tl;dr – Route `Workers CI` preview build alerts to `blackhole`.**
+
+`Workers CI` preview builds are not currently monitored as live services, so `WCI_Preview_High_Build_Failure_Rate` and `WCI_Preview_Build_Completion_Rate_Low` are non-actionable when they fire in `chat-banda`.
+
+The alerts remain visible in `Alertmanager`/`Karma`, but no longer post to `chat-banda` or trigger escalation notifications.
+
+---
+
+References: [`chat-banda` thread](https://chat.google.com/room/example)
 ```
 
 ## Mise Tasks
