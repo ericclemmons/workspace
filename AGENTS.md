@@ -94,8 +94,8 @@ This removes clean repo worktrees for the task.
 - Describe the customer/product outcome, not just the code change.
 - If a changeset is supported, use the same concise product-focused format as the MR description.
 - Do not pass escaped newlines like `\n` in `glab --description` values. This renders literal `\n` text in GitLab.
-- For multiline MR descriptions, do not use `glab mr create --description` or `glab mr update --description`; those can collapse line breaks or render escaped newlines incorrectly. Write the description to a temporary markdown file, then update with `glab api projects/:fullpath/merge_requests/<iid> -X PUT -F description=@/path/to/description.md`. Verify with `glab mr view <iid>` that GitLab shows real line breaks.
-- For one-line descriptions only, direct `glab mr create --description "Before, ...; now, ..."` or `glab mr update <id> --description "Before, ...; now, ..."` is acceptable.
+- For multiline MR descriptions, do not use `glab mr create --description` or `glab mr update --description`; those can collapse line breaks or render escaped newlines incorrectly. Write the description to a temporary markdown file under `/tmp`, then update with `glab api projects/:fullpath/merge_requests/<iid> -X PUT -F description=@/tmp/description.md`. Verify with `glab mr view <iid>` that GitLab shows real line breaks.
+- Do not use one-line MR descriptions for normal MR creation or updates. Only use a one-line description if the user explicitly requests one.
 
 Preferred MR description format:
 
