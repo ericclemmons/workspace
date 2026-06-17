@@ -2,6 +2,8 @@
 
 This is a public **workspace repo** that coordinates multiple normal Git clones. Source repos live as local clones under `repos/`, and per-task Git worktrees live under `worktrees/<task>/<repo>`.
 
+When asked to inspect or work on source code, default to this workspace at `~/workspace`, not `~`. Prefer the local clones under `repos/` for reading/searching and your own branch's worktrees under `worktrees/` for edits.
+
 ## Layout
 
 ```
@@ -88,7 +90,7 @@ This removes clean repo worktrees for the task.
 - Before creating an MR, inspect `git status`, `git diff`, recent commits, and the target branch diff. Stage only intended files.
 - Use `glab mr create` or `glab mr update` directly for GitLab MRs.
 - Create GitLab MRs as drafts first with `glab mr create --draft ...` unless the user explicitly asks for a ready MR.
-- Do not post comments or replies on MRs as the user unless the user explicitly asks you to comment. Updating MR titles and descriptions is allowed when it follows the guidance below or the user's direct instructions.
+- Do not post comments, notes, or replies on MRs as the user unless the user explicitly asks you to comment/post/reply on GitLab. Asking for links, code references, review text, or wording to use is not permission to post; provide the text/link in chat instead. Updating MR titles and descriptions is allowed when it follows the guidance below or the user's direct instructions.
 - MR descriptions must be concise and product-focused. Avoid generated summaries or long implementation notes unless the user explicitly asks for them.
 - Use the standard multiline MR format when creating or updating MRs. Do not collapse it to one line unless the user explicitly asks for a one-line description.
 - Describe the customer/product outcome, not just the code change.
