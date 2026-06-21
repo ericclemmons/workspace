@@ -1,5 +1,5 @@
-# Agent meta-repo configuration.
-# Run `mise tasks` to list tasks. Run `mise install` to install pinned tools.
+# Agent workspace configuration.
+# Run `mise bootstrap` for first-time setup. Run `mise tasks` to list tasks.
 
 [tools]
 jq = "latest"

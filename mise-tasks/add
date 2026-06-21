@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
-#MISE description="Clone an upstream repo into repos/<name>. Usage: add <name> <url> [branch]"
+#MISE description="Clone an upstream repo into repos/<name> and add its subtree. Usage: add <name> <url> [branch] [prefix]"
 source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
 
 name=${1:-}
 url=${2:-}
 branch=${3:-}
+prefix=${4:-}
 
-[[ -z "$name" || -z "$url" ]] && die "usage: mise run add <name> <url> [branch]"
+[[ -z "$name" || -z "$url" ]] && die "usage: mise run add <name> <url> [branch] [prefix]"
 validate_name "repo" "$name"
 require_workspace_root
 
 root=$(workspace_root)
 mkdir -p "$root/repos"
 dest="$root/repos/$name"
+[[ -n "$prefix" ]] || prefix="$name"
+[[ "$prefix" != /* && "$prefix" != *..* && "$prefix" != "." ]] || die "invalid prefix: '$prefix'"
 
 if [[ -e "$dest" ]]; then
   [[ -d "$dest/.git" || -f "$dest/.git" ]] || die "repos/$name already exists and is not a git repo"
@@ -30,4 +33,8 @@ else
 fi
 
 git -C "$dest" config workspace.defaultBranch "$branch"
-ok "added repos/$name (origin: $url, default branch: $branch)"
+git -C "$dest" config workspace.prefix "$prefix"
+
+ensure_subtree_on_current_branch "$name"
+
+ok "added repos/$name (origin: $url, default branch: $branch, prefix: $prefix)"

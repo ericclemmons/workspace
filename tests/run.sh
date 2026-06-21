@@ -38,22 +38,18 @@ section() { echo; echo "$1"; }
 fresh_meta() {
   local dir path base
   dir=$(mktemp -d -p "$SCRATCH" meta.XXXXXX)
-  for path in README.md AGENTS.md Brewfile mise.toml hk.pkl .gitconfig .gitignore opencode.json \
+  for path in README.md AGENTS.md mise.toml hk.pkl .gitconfig .gitignore opencode.json \
               .claude .githooks .opencode mise-tasks tests; do
     [[ -e "$TEMPLATE_ROOT/$path" ]] || continue
     base=$(basename "$path")
     cp -R "$TEMPLATE_ROOT/$path" "$dir/$base"
   done
-  mkdir -p "$dir/repos" "$dir/worktrees"
   cd "$dir"
   git init -q -b main
   git config user.email "test@test"
   git config user.name "Test"
-  git config core.hooksPath .githooks
-  git config include.path ../.gitconfig
   chmod +x .githooks/*.sh .githooks/pre-commit mise-tasks/*
-  git add .
-  META_ALLOW_COMMIT=1 git commit -q -m "scaffold"
+  bash mise-tasks/bootstrap >/dev/null
   echo "$dir"
 }
 
@@ -87,11 +83,12 @@ run_hook() {
 test_structural() {
   section "structural"
 
-  for f in README.md AGENTS.md Brewfile mise.toml hk.pkl .gitconfig .gitignore \
+  for f in README.md AGENTS.md mise.toml hk.pkl .gitconfig .gitignore \
            opencode.json .claude/settings.json \
            .githooks/pre-commit .githooks/agent-guard-edit.sh \
            .githooks/agent-guard-bash.sh .githooks/agent-guard-context.sh \
-           mise-tasks/_lib mise-tasks/add mise-tasks/branch mise-tasks/clean \
+           mise-tasks/_lib mise-tasks/_init mise-tasks/add mise-tasks/bootstrap \
+           mise-tasks/branch mise-tasks/clean \
            mise-tasks/diff mise-tasks/list mise-tasks/pull mise-tasks/push \
            mise-tasks/status mise-tasks/test tests/run.sh; do
     [[ -f "$TEMPLATE_ROOT/$f" ]] && pass "exists: $f" || fail "exists: $f"
@@ -129,6 +126,34 @@ test_pre_commit() {
   assert_exit_code 1 $rc "blocks committing repos content"
   assert_contains "cannot include repos/ or worktrees/" "$out" "repos block reason present"
   git reset -q HEAD repos/private/file.txt
+}
+
+test_bootstrap_task() {
+  section "bootstrap task"
+  local meta out rc
+  meta=$(mktemp -d -p "$SCRATCH" bootstrap.XXXXXX)
+  for path in README.md AGENTS.md mise.toml hk.pkl .gitconfig .gitignore opencode.json \
+              .claude .githooks .opencode mise-tasks tests; do
+    [[ -e "$TEMPLATE_ROOT/$path" ]] || continue
+    cp -R "$TEMPLATE_ROOT/$path" "$meta/$(basename "$path")"
+  done
+  cd "$meta"
+  export GIT_CONFIG_GLOBAL="$meta/global-gitconfig"
+  git config --global user.email "test@test"
+  git config --global user.name "Test"
+  chmod +x .githooks/*.sh .githooks/pre-commit mise-tasks/*
+
+  out=$(bash mise-tasks/bootstrap 2>&1); rc=$?
+  assert_exit_code 0 $rc "bootstrap initializes local workspace"
+  [[ -d "$meta/.git" ]] && pass "bootstrap created .git" || fail "bootstrap created .git"
+  [[ "$(git config --get core.hooksPath)" == ".githooks" ]] && pass "bootstrap configured hooks" || fail "bootstrap configured hooks"
+  [[ -d "$meta/repos" && -d "$meta/worktrees" ]] && pass "bootstrap created workspace directories" || fail "bootstrap created workspace directories"
+  git log --oneline -1 | grep -q "Initialize workspace" && pass "bootstrap created initial commit" || fail "bootstrap created initial commit"
+
+  out=$(bash mise-tasks/bootstrap 2>&1); rc=$?
+  assert_exit_code 0 $rc "bootstrap is idempotent"
+  assert_contains "already initialized" "$out" "bootstrap reports initialized workspace"
+  unset GIT_CONFIG_GLOBAL
 }
 
 test_agent_edit_guard() {
@@ -223,7 +248,7 @@ test_mise_tasks() {
 
   out=$(bash mise-tasks/branch jira-123 2>&1); rc=$?
   assert_exit_code 0 $rc "branch creates task repo worktree"
-  [[ -f "$meta/worktrees/jira-123/fake/.git" ]] && pass "branch created worktrees/jira-123/fake" || fail "branch created worktrees/jira-123/fake"
+  [[ -f "$meta/worktrees/jira-123/fake/README.md" ]] && pass "branch created worktrees/jira-123/fake prefix" || fail "branch created worktrees/jira-123/fake prefix"
   [[ "$(git -C "$meta/worktrees/jira-123/fake" symbolic-ref --short HEAD)" == "jira-123" ]] && pass "branch name matches task" || fail "branch name matches task"
 
   out=$(bash mise-tasks/branch jira-123 2>&1); rc=$?
@@ -291,6 +316,40 @@ test_end_to_end() {
   [[ ! -e "$meta/worktrees/e2e/fakerepo" ]] && pass "pull removed merged repo worktree" || fail "pull removed merged repo worktree"
 }
 
+test_cross_repo_subtree_push() {
+  section "cross-repo subtree push"
+  local meta dashboard api ui out rc repo
+  meta=$(fresh_meta); cd "$meta"
+
+  dashboard=$(fake_upstream dashboard)
+  api=$(fake_upstream api)
+  ui=$(fake_upstream ui)
+
+  bash mise-tasks/add dashboard "$dashboard" main apps/dashboard >/dev/null
+  bash mise-tasks/add api "$api" main services/api >/dev/null
+  bash mise-tasks/add ui "$ui" main packages/ui >/dev/null
+  bash mise-tasks/branch wire-me >/dev/null
+
+  cd worktrees/wire-me
+  git config user.email "t@t"
+  git config user.name "Task"
+  echo dashboard >> apps/dashboard/README.md
+  echo api >> services/api/README.md
+  echo ui >> packages/ui/README.md
+  git add apps/dashboard services/api packages/ui
+  git commit -q -m "wire me"
+
+  out=$(bash "$meta/mise-tasks/push" 2>&1); rc=$?
+  assert_exit_code 0 $rc "push split-pushes cross-repo workspace commit"
+  assert_contains "pushed 3 repo" "$out" "push reports three repos"
+
+  for repo in dashboard api ui; do
+    git -C "${!repo}" show-ref --verify --quiet refs/heads/wire-me \
+      && pass "$repo received branch wire-me" \
+      || fail "$repo received branch wire-me"
+  done
+}
+
 echo "agent-workspace tests"
 echo "template: $TEMPLATE_ROOT"
 echo "scratch:  $SCRATCH"
@@ -306,12 +365,14 @@ if [[ ${#missing[@]} -gt 0 ]]; then
 fi
 
 test_structural
+test_bootstrap_task
 test_pre_commit
 test_agent_edit_guard
 test_agent_bash_guard
 test_agent_context_guard
 test_mise_tasks
 test_end_to_end
+test_cross_repo_subtree_push
 
 echo
 echo "─────────────────────────────────────"

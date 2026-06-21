@@ -3,14 +3,16 @@
 # Run by hk via hk.pkl.
 set -euo pipefail
 
-# Allow privileged ops for tests/bootstrap commits.
+# Allow privileged ops for tests.
 [[ "${META_ALLOW_COMMIT:-}" == "1" ]] && exit 0
 
 branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "DETACHED")
 toplevel=$(git rev-parse --show-toplevel)
+has_commits=1
+git rev-parse --verify HEAD >/dev/null 2>&1 || has_commits=0
 
 # No direct commits on main.
-if [[ "$branch" == "main" ]]; then
+if [[ "$branch" == "main" && $has_commits -eq 1 ]]; then
   cat >&2 <<EOF
 ✗ Direct commits to main are not allowed.
 

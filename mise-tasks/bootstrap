@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#MISE description="Finalize workspace bootstrap after mise installs packages/tools."
+exec "${MISE_TASK_DIR:-$(dirname "$0")}/_init"

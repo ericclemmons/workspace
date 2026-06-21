@@ -24,6 +24,14 @@ if [[ "$cwd" == "$meta_root" ]]; then
   fi
 fi
 
+if [[ "$cwd" == "$meta_root"/worktrees/* ]]; then
+  if [[ -d "$cwd/.git" || -f "$cwd/.git" ]]; then
+    if echo "$cmd" | grep -qE '\bgit[[:space:]]+push\b'; then
+      block "Refusing raw git push from a workspace task worktree. Use 'mise run push' so repo prefixes are split and pushed to their own upstream repos."
+    fi
+  fi
+fi
+
 # Base repos are read-only caches. Mutations must happen in worktrees/<task>/<repo>.
 if [[ "$cwd" == "$meta_root/repos/"* ]]; then
   if echo "$cmd" | grep -qE '\bgit[[:space:]]+(commit|add|push|merge|rebase|cherry-pick|reset|restore|stash|switch|checkout)\b'; then

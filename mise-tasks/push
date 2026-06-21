@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-#MISE description="Push changed repos from a task worktree. Usage: push [repo...]"
+#MISE description="Split and push changed repo prefixes from a task worktree. Usage: push [repo...]"
 source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
 
 require_task_root
 root=$(workspace_root)
 task=$(task_root)
 branch=$(task_name)
+current=$(git -C "$task" symbolic-ref --short HEAD 2>/dev/null || true)
+[[ "$current" == "$branch" ]] || die "workspace worktree is on branch '$current', expected '$branch'"
+workspace_clean "$task" || die "worktrees/$branch has uncommitted changes; commit before push"
 
 repos=("$@")
 if [[ ${#repos[@]} -eq 0 ]]; then
@@ -13,36 +16,36 @@ if [[ ${#repos[@]} -eq 0 ]]; then
   while IFS= read -r repo; do repos+=("$repo"); done < <(list_task_repos)
 fi
 
-[[ ${#repos[@]} -gt 0 ]] || die "no repo worktrees found in worktrees/$branch"
+[[ ${#repos[@]} -gt 0 ]] || die "no repo prefixes found in worktrees/$branch"
 
 pushed=0
 for repo in "${repos[@]}"; do
   validate_name "repo" "$repo"
-  wt="$task/$repo"
-  [[ -d "$wt/.git" || -f "$wt/.git" ]] || die "worktrees/$branch/$repo is not a git repo"
-  current=$(git -C "$wt" symbolic-ref --short HEAD 2>/dev/null || true)
-  [[ "$current" == "$branch" ]] || die "$repo is on branch '$current', expected '$branch'"
-  repo_clean "$wt" || die "$repo has uncommitted changes; commit before push"
+  base="$root/repos/$repo"
+  [[ -d "$base/.git" || -f "$base/.git" ]] || die "repos/$repo is not a git repo"
 
-  upstream=$(git -C "$wt" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)
-  if [[ -n "$upstream" && "${upstream#*/}" == "$branch" ]]; then
-    ahead=$(git -C "$wt" rev-list --count "$upstream..HEAD")
-    if [[ "$ahead" == "0" ]]; then
-      info "skipping $repo — no commits ahead of $upstream"
-      continue
-    fi
-    info "pushing $repo ($branch → $upstream)"
-    git -C "$wt" push
-  else
-    base="$root/repos/$repo"
-    default=$(repo_default_branch "$base")
-    if git -C "$wt" merge-base --is-ancestor HEAD "origin/$default" 2>/dev/null; then
-      info "skipping $repo — no commits ahead of origin/$default"
-      continue
-    fi
-    info "pushing $repo ($branch → origin/$branch)"
-    git -C "$wt" push -u origin "$branch"
+  prefix=$(repo_prefix "$repo")
+  [[ -e "$task/$prefix" ]] || die "worktrees/$branch is missing prefix $prefix for $repo"
+
+  if git -C "$task" diff --quiet main..HEAD -- "$prefix"; then
+    info "skipping $repo — no changes under $prefix"
+    continue
   fi
+
+  remote=$(cd "$task" && ensure_workspace_remote "$repo")
+  old_ref=$(git -C "$task" ls-remote --heads "$remote" "$branch" | awk '{print $1}')
+
+  info "splitting $repo from $prefix"
+  split=$(git -C "$task" subtree split --prefix "$prefix" HEAD)
+
+  if [[ -n "$old_ref" ]]; then
+    info "updating $repo ($branch) with explicit lease"
+    git -C "$task" push "$remote" "$split:refs/heads/$branch" "--force-with-lease=refs/heads/$branch:$old_ref"
+  else
+    info "pushing $repo ($branch)"
+    git -C "$task" push "$remote" "$split:refs/heads/$branch"
+  fi
+
   pushed=$((pushed + 1))
   ok "pushed $repo"
 done

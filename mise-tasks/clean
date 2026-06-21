@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Remove one task worktree after all repo worktrees are clean. Usage: clean <task>"
+#MISE description="Remove one clean workspace task worktree. Usage: clean <task>"
 source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
 
 task_name_arg=${1:-}
@@ -10,20 +10,9 @@ require_workspace_root
 root=$(workspace_root)
 task="$root/worktrees/$task_name_arg"
 [[ -d "$task" ]] || die "worktrees/$task_name_arg does not exist"
+[[ -d "$task/.git" || -f "$task/.git" ]] || die "worktrees/$task_name_arg is not a workspace git worktree"
+workspace_clean "$task" || die "worktrees/$task_name_arg has uncommitted changes; commit or discard them first"
 
-for repo in "$task"/*; do
-  [[ -d "$repo/.git" || -f "$repo/.git" ]] || continue
-  repo_clean "$repo" || die "$(basename "$repo") has uncommitted changes; commit or discard them first"
-done
-
-for repo in "$task"/*; do
-  [[ -d "$repo/.git" || -f "$repo/.git" ]] || continue
-  name=$(basename "$repo")
-  base="$root/repos/$name"
-  [[ -d "$base/.git" || -f "$base/.git" ]] || die "repos/$name is missing"
-  info "removing worktrees/$task_name_arg/$name"
-  git -C "$base" worktree remove "$repo"
-done
-
-rmdir "$task" 2>/dev/null || warn "worktrees/$task_name_arg is not empty; left it in place"
+info "removing worktrees/$task_name_arg"
+git -C "$root" worktree remove "$task"
 ok "cleaned worktrees/$task_name_arg"

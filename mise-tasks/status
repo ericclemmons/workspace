@@ -3,7 +3,7 @@
 source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
 
 if task=$(task_root 2>/dev/null); then
-  root=$task
+  workspace=$task
   scope="worktrees/$(basename "$task")"
   repos=("$@")
   if [[ ${#repos[@]} -eq 0 ]]; then
@@ -12,7 +12,7 @@ if task=$(task_root 2>/dev/null); then
   fi
 else
   require_workspace_root
-  root="$(workspace_root)/repos"
+  repo_root="$(workspace_root)/repos"
   scope="repos"
   repos=("$@")
   if [[ ${#repos[@]} -eq 0 ]]; then
@@ -27,9 +27,17 @@ fi
 
 for repo in "${repos[@]}"; do
   validate_name "repo" "$repo"
-  path="$root/$repo"
-  [[ -d "$path/.git" || -f "$path/.git" ]] || die "$scope/$repo is not a git repo"
   echo
-  info "$scope/$repo"
-  git -C "$path" status --short --branch
+  if [[ "${workspace:-}" ]]; then
+    prefix=$(repo_prefix "$repo")
+    [[ -e "$workspace/$prefix" ]] || die "$scope is missing prefix $prefix for $repo"
+    info "$scope/$repo ($prefix)"
+    git -C "$workspace" diff --stat main..HEAD -- "$prefix"
+    git -C "$workspace" status --short -- "$prefix"
+  else
+    path="$repo_root/$repo"
+    [[ -d "$path/.git" || -f "$path/.git" ]] || die "$scope/$repo is not a git repo"
+    info "$scope/$repo"
+    git -C "$path" status --short --branch
+  fi
 done

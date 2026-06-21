@@ -1,74 +1,137 @@
-# agent-meta
+# workspace
 
-An opinionated workspace for working across multiple repositories with normal Git clones and per-task worktrees.
+An opinionated local workspace for working across multiple repositories as if they were one monorepo, without turning the upstream repos into a monorepo.
 
+The workspace repo is configuration and coordination only. It should be installed like dotfiles with `tiged` or a tarball download, then used as a local-only Git repo. Do not clone it as the repo you push feature branches to.
+
+```txt
+repos/<repo>/          # base clone, default branch, read-only cache
+worktrees/<task>/      # one local workspace git worktree, branch == task
+worktrees/<task>/<repo-or-prefix>/  # repo contents imported with git subtree
 ```
-repos/<repo>/                 # base clone, default branch, read-only cache
-worktrees/<task>/<repo>/      # task worktree, branch name == task name
-```
 
-The workspace repo stays public and only tracks rules, tasks, hooks, and config. Private source code in `repos/*` and `worktrees/*` is ignored.
+## Install
 
-## Setup
+Install `mise` once, then create the workspace from the template without preserving its Git remote:
 
 ```bash
-brew bundle
-mise install
+npx tiged ericclemmons/workspace ~/workspace
+cd ~/workspace
+mise bootstrap
 ```
 
-Add upstream repos once:
+`tiged` matters because the top-level Git repo is local coordination state. It will contain subtree commits for private/source repos and is not meant to be pushed back to `ericclemmons/workspace`.
+
+`mise bootstrap` is the onboarding command. It installs the configured tools, installs hooks, initializes the local workspace Git repo if needed, and creates the first local commit. If tools are already installed, rerunning it is safe.
+
+## Add Repos
+
+Add each upstream repo once from the workspace root:
 
 ```bash
-mise run add funfetti git@gitlab.example.com:team/funfetti.git
-mise run add api      git@github.com:you/api.git
+mise run add dashboard git@github.com:you/dashboard.git main
+mise run add api       git@github.com:you/api.git master
+mise run add ui        git@github.com:you/ui.git staging packages/ui
 ```
+
+Arguments:
+
+```txt
+add <name> <url> [default-branch] [prefix]
+```
+
+If `prefix` is omitted, the repo appears at `<name>`. The base clone stays in `repos/<name>`, and the source is imported into local `main` with `git subtree`.
 
 ## Daily Workflow
 
+Sync local `main` with all default upstream branches:
+
 ```bash
 mise run pull
-mise run branch JIRA-123
-cd worktrees/JIRA-123
+```
 
-# edit and commit inside repo directories, e.g. ./funfetti
+Start a cohesive feature branch/worktree:
+
+```bash
+mise run branch wire-api-me
+cd worktrees/wire-api-me
+```
+
+Now edit across repo prefixes in one checkout:
+
+```txt
+dashboard/
+api/
+packages/ui/
+```
+
+Commit once at the workspace worktree root:
+
+```bash
+git add dashboard api packages/ui
+git commit -m "Wire up /api/me"
+```
+
+Review the combined change:
+
+```bash
 mise run status
 mise run diff
+```
+
+Push split PR branches back to each repo:
+
+```bash
 mise run push
+```
 
+`mise run push` checks which repo prefixes changed, runs `git subtree split --prefix <prefix> HEAD`, and pushes branch `wire-api-me` to each changed repo. If a repo branch already exists, it refreshes it with an explicit `--force-with-lease`.
+
+Clean up the local workspace worktree after merge:
+
+```bash
 cd ../..
-mise run clean JIRA-123
+mise run pull
+mise run clean wire-api-me
 ```
 
-`mise run branch JIRA-123` creates one repo worktree per configured repo:
+## Branch Names
 
-```
-worktrees/JIRA-123/funfetti   # branch JIRA-123 in funfetti
-worktrees/JIRA-123/api        # branch JIRA-123 in api
+The task name, workspace branch, workspace worktree name, and per-repo pushed branch all match:
+
+```txt
+worktrees/wire-api-me
+workspace branch: wire-api-me
+dashboard branch: wire-api-me
+api branch: wire-api-me
+ui branch: wire-api-me
 ```
 
-## Tasks
+That consistency is the point of the workflow: treat a multi-repo feature as one monorepo-style branch while keeping upstream repos separate.
+
+## Commands
 
 | Task | Where | What it does |
 |---|---|---|
-| `add <name> <url> [branch]` | workspace root | Clone an upstream repo into `repos/<name>`. |
-| `pull [repo...]` | workspace root | Fast-forward workspace and base repos. |
-| `branch <task> [repo...]` | workspace root | Create `worktrees/<task>/<repo>` checkouts on branch `<task>`. |
-| `status [repo...]` | root or task root | Show aggregated status. |
-| `diff [repo...] [-- args]` | task root | Show aggregated diffs. |
-| `push [repo...]` | task root | Push branch `<task>` for repos with commits. |
-| `clean <task>` | workspace root | Remove clean repo worktrees for a task. |
-| `list` | workspace root | List configured repos and task worktrees. |
+| `add <name> <url> [branch] [prefix]` | workspace root | Clone `repos/<name>`, record metadata, and add a subtree prefix to local `main`. |
+| `pull [repo...]` | workspace root on `main` | Fast-forward base clones and subtree-pull repo defaults into local `main`. |
+| `branch <task> [repo...]` | workspace root | Create `worktrees/<task>` as one workspace Git worktree on branch `<task>`. |
+| `status [repo...]` | root or task root | Show workspace/base status or per-prefix task status. |
+| `diff [repo...] [-- args]` | task root | Show per-prefix diffs against `main`, plus uncommitted diffs. |
+| `push [repo...]` | task root | Split changed prefixes and push branch `<task>` to each repo. |
+| `clean <task>` | workspace root | Remove a clean workspace task worktree. |
+| `list` | workspace root | List configured repos, prefixes, and task worktrees. |
 | `test` | anywhere | Run the validation suite. |
 
-## Guard Rails
+## Rules
 
-Git and agent hooks enforce the workflow:
-
-- Agents cannot edit `repos/*`.
-- Agents can edit repo files under `worktrees/<task>/<repo>/*`.
-- Mutating Git commands are blocked in `repos/*` and at the workspace root.
-- Workspace commits cannot include `repos/*` or `worktrees/*`.
-- `--no-verify`, `core.hooksPath`, and forced worktree removal are blocked.
+- `repos/*` is read-only cache state.
+- Source edits happen in `worktrees/<task>/<prefix>/*`.
+- Commit from `worktrees/<task>`, not from `repos/*`.
+- Use `mise run pull` instead of root `git pull` for repo sync.
+- Use `mise run push` instead of root `git push` for repo PR branches.
+- The workspace root is local-only and should not be pushed.
+- `--no-verify`, `core.hooksPath` reconfiguration, and `git worktree remove --force` are blocked.
 
 ## Tests
 
@@ -76,4 +139,4 @@ Git and agent hooks enforce the workflow:
 mise run test
 ```
 
-The tests spin up temporary workspace clones and local fake upstream repos.
+The tests create temporary local upstream repos and exercise add, branch, subtree commit, split push, pull, and cleanup.

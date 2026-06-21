@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Create per-repo worktrees on one shared branch. Usage: branch <name> [repo...]"
+#MISE description="Create one workspace worktree on a shared branch. Usage: branch <name> [repo...]"
 source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
 
 branch=${1:-}
@@ -12,7 +12,6 @@ require_workspace_root
 
 root=$(workspace_root)
 task="$root/worktrees/$branch"
-mkdir -p "$task"
 
 repos=("$@")
 if [[ ${#repos[@]} -eq 0 ]]; then
@@ -22,36 +21,29 @@ fi
 
 [[ ${#repos[@]} -gt 0 ]] || die "no repos configured; add one with: mise run add <name> <url> [branch]"
 
+workspace_clean "$root" || die "workspace has uncommitted changes; commit or stash first"
+
+if [[ -d "$task/.git" || -f "$task/.git" ]]; then
+  info "workspace worktree already exists: worktrees/$branch"
+else
+  [[ ! -e "$task" ]] || die "worktrees/$branch exists and is not a git worktree"
+  mkdir -p "$root/worktrees"
+  if git show-ref --verify --quiet "refs/heads/$branch"; then
+    info "adding workspace worktree on existing branch $branch"
+    git worktree add -q "$task" "$branch"
+  else
+    info "adding workspace worktree on new branch $branch from main"
+    git worktree add -q -b "$branch" "$task" main
+  fi
+fi
+
 for repo in "${repos[@]}"; do
   validate_name "repo" "$repo"
   base="$root/repos/$repo"
-  target="$task/$repo"
   [[ -d "$base/.git" || -f "$base/.git" ]] || die "repos/$repo is not a git repo"
-
-  if [[ -d "$target/.git" || -f "$target/.git" ]]; then
-    info "worktree already exists: worktrees/$branch/$repo"
-    continue
-  fi
-  [[ ! -e "$target" ]] || die "worktrees/$branch/$repo exists and is not a git worktree"
-
   repo_clean "$base" || die "repos/$repo has uncommitted changes; clean it before branching"
   git -C "$base" fetch --prune origin
-
-  if git -C "$base" show-ref --verify --quiet "refs/heads/$branch"; then
-    info "adding $repo on existing branch $branch"
-    git -C "$base" worktree add -q "$target" "$branch"
-  elif git -C "$base" show-ref --verify --quiet "refs/remotes/origin/$branch"; then
-    info "adding $repo tracking origin/$branch"
-    git -C "$base" worktree add -q -b "$branch" "$target" "origin/$branch"
-    git -C "$target" branch --set-upstream-to="origin/$branch" "$branch" >/dev/null
-  else
-    default=$(repo_default_branch "$base")
-    start="origin/$default"
-    git -C "$base" show-ref --verify --quiet "refs/remotes/$start" || start="$default"
-    info "adding $repo on new branch $branch from $start"
-    git -C "$base" worktree add -q -b "$branch" "$target" "$start"
-    git -C "$target" branch --unset-upstream >/dev/null 2>&1 || true
-  fi
+  ( cd "$task" && ensure_subtree_on_current_branch "$repo" )
 done
 
 ok "ready: worktrees/$branch"

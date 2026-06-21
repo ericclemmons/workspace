@@ -45,6 +45,11 @@ list_repos() {
   done | sort
 }
 
+repo_path() {
+  local repo=$1
+  echo "$(workspace_root)/repos/$repo"
+}
+
 repo_default_branch() {
   local repo=$1 configured ref
   configured=$(git -C "$repo" config --get workspace.defaultBranch 2>/dev/null || true)
@@ -56,6 +61,27 @@ repo_default_branch() {
   else
     echo "main"
   fi
+}
+
+repo_prefix() {
+  local repo=$1 base configured
+  base=$(repo_path "$repo")
+  configured=$(git -C "$base" config --get workspace.prefix 2>/dev/null || true)
+  if [[ -n "$configured" ]]; then
+    echo "$configured"
+  else
+    echo "$repo"
+  fi
+}
+
+repo_origin_url() {
+  local repo=$1 base
+  base=$(repo_path "$repo")
+  git -C "$base" remote get-url origin
+}
+
+workspace_branch() {
+  git symbolic-ref --short HEAD 2>/dev/null || echo "DETACHED"
 }
 
 task_root() {
@@ -83,19 +109,55 @@ require_task_root() {
   [[ "$cwd" == "$task" ]] || die "run this from the task root: $task"
   root=$(workspace_root)
   [[ "$task" == "$root"/worktrees/* ]] || die "not inside a workspace task"
+  [[ -d "$task/.git" || -f "$task/.git" ]] || die "worktrees/$(basename "$task") is not a workspace git worktree"
 }
 
 list_task_repos() {
-  local task path name
+  local task repo prefix
   task=$(task_root) || return 0
-  for path in "$task"/*; do
-    [[ -d "$path/.git" || -f "$path/.git" ]] || continue
-    name=$(basename "$path")
-    printf '%s\n' "$name"
-  done | sort
+  while IFS= read -r repo; do
+    prefix=$(repo_prefix "$repo")
+    [[ -e "$task/$prefix" ]] || continue
+    printf '%s\n' "$repo"
+  done < <(list_repos) | sort
 }
 
 repo_clean() {
   local repo=$1
   git -C "$repo" diff --quiet && git -C "$repo" diff --cached --quiet
+}
+
+workspace_clean() {
+  local dir=${1:-.}
+  git -C "$dir" diff --quiet && git -C "$dir" diff --cached --quiet
+}
+
+ensure_workspace_remote() {
+  local repo=$1 url remote current
+  url=$(repo_origin_url "$repo")
+  remote="workspace-$repo"
+  if git remote get-url "$remote" >/dev/null 2>&1; then
+    current=$(git remote get-url "$remote")
+    [[ "$current" == "$url" ]] || git remote set-url "$remote" "$url"
+  else
+    git remote add "$remote" "$url"
+  fi
+  echo "$remote"
+}
+
+ensure_subtree_on_current_branch() {
+  local repo=$1 base prefix default remote
+  base=$(repo_path "$repo")
+  prefix=$(repo_prefix "$repo")
+  default=$(repo_default_branch "$base")
+  remote=$(ensure_workspace_remote "$repo")
+
+  [[ -d "$base/.git" || -f "$base/.git" ]] || die "repos/$repo is not a git repo"
+  if [[ -e "$prefix" ]]; then
+    return 0
+  fi
+
+  info "adding subtree $repo at $prefix from $default"
+  git fetch "$remote" "$default"
+  git subtree add --prefix "$prefix" "$remote/$default"
 }
