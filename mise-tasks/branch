@@ -19,7 +19,7 @@ if [[ ${#repos[@]} -eq 0 ]]; then
   while IFS= read -r repo; do repos+=("$repo"); done < <(list_repos)
 fi
 
-[[ ${#repos[@]} -gt 0 ]] || die "no repos configured; add one with: mise run add <name> <url> [branch]"
+[[ ${#repos[@]} -gt 0 ]] || die "no repos configured; add one with: mise run add <name> <url> [prefix]"
 
 workspace_clean "$root" || die "workspace has uncommitted changes; commit or stash first"
 

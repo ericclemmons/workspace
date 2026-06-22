@@ -54,19 +54,19 @@ fresh_meta() {
 }
 
 fake_upstream() {
-  local name=${1:-fake} bare seed
+  local name=${1:-fake} default_branch=${2:-main} bare seed
   bare=$(mktemp -d -p "$SCRATCH" "$name.git.XXXXXX")
   git init -q --bare "$bare"
   seed=$(mktemp -d -p "$SCRATCH" "$name.seed.XXXXXX")
-  git -C "$seed" init -q -b main
+  git -C "$seed" init -q -b "$default_branch"
   git -C "$seed" config user.email "u@u"
   git -C "$seed" config user.name "Upstream"
   printf '# %s\n' "$name" > "$seed/README.md"
   git -C "$seed" add .
   git -C "$seed" commit -q -m init
   git -C "$seed" remote add origin "$bare"
-  git -C "$seed" push -q -u origin main
-  git -C "$bare" symbolic-ref HEAD refs/heads/main
+  git -C "$seed" push -q -u origin "$default_branch"
+  git -C "$bare" symbolic-ref HEAD "refs/heads/$default_branch"
   echo "$bare"
 }
 
@@ -235,13 +235,21 @@ test_agent_context_guard() {
 
 test_mise_tasks() {
   section "mise tasks"
-  local meta upstream out rc
+  local meta upstream staging_upstream out rc
   meta=$(fresh_meta); cd "$meta"
   upstream=$(fake_upstream fake)
+  staging_upstream=$(fake_upstream staging-repo staging)
 
   out=$(bash mise-tasks/add fake "$upstream" 2>&1); rc=$?
   assert_exit_code 0 $rc "add clones a base repo"
   [[ -d "$meta/repos/fake/.git" ]] && pass "add created repos/fake clone" || fail "add created repos/fake clone"
+
+  out=$(bash mise-tasks/add staging-repo "$staging_upstream" 2>&1); rc=$?
+  assert_exit_code 0 $rc "add clones remote default branch"
+  [[ "$(git -C "$meta/repos/staging-repo" config --get workspace.defaultBranch)" == "staging" ]] && pass "add records remote default branch" || fail "add records remote default branch"
+
+  out=$(bash mise-tasks/add too-many "$upstream" main prefix 2>&1 || true)
+  assert_contains "usage: mise run add <name> <url> \[prefix\]" "$out" "add rejects branch argument"
 
   out=$(bash mise-tasks/add fake "$upstream" 2>&1 || true)
   assert_contains "already exists" "$out" "add rejects duplicate"
@@ -325,9 +333,9 @@ test_cross_repo_subtree_push() {
   api=$(fake_upstream api)
   ui=$(fake_upstream ui)
 
-  bash mise-tasks/add dashboard "$dashboard" main apps/dashboard >/dev/null
-  bash mise-tasks/add api "$api" main services/api >/dev/null
-  bash mise-tasks/add ui "$ui" main packages/ui >/dev/null
+  bash mise-tasks/add dashboard "$dashboard" apps/dashboard >/dev/null
+  bash mise-tasks/add api "$api" services/api >/dev/null
+  bash mise-tasks/add ui "$ui" packages/ui >/dev/null
   bash mise-tasks/branch wire-me >/dev/null
 
   cd worktrees/wire-me

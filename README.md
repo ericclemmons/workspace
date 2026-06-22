@@ -29,18 +29,18 @@ mise bootstrap
 Add each upstream repo once from the workspace root:
 
 ```bash
-mise run add dashboard git@github.com:you/dashboard.git main
-mise run add api       git@github.com:you/api.git master
-mise run add ui        git@github.com:you/ui.git staging packages/ui
+mise run add dashboard git@github.com:you/dashboard.git
+mise run add api       git@github.com:you/api.git
+mise run add ui        git@github.com:you/ui.git packages/ui
 ```
 
 Arguments:
 
 ```txt
-add <name> <url> [default-branch] [prefix]
+add <name> <url> [prefix]
 ```
 
-If `prefix` is omitted, the repo appears at `<name>`. The base clone stays in `repos/<name>`, and the source is imported into local `main` with `git subtree`.
+`add` clones the upstream repo's default branch. If `prefix` is omitted, the repo appears at `<name>`. The base clone stays in `repos/<name>`, and the source is imported into local `main` with `git subtree`.
 
 ## Daily Workflow
 
@@ -113,7 +113,7 @@ That consistency is the point of the workflow: treat a multi-repo feature as one
 
 | Task | Where | What it does |
 |---|---|---|
-| `add <name> <url> [branch] [prefix]` | workspace root | Clone `repos/<name>`, record metadata, and add a subtree prefix to local `main`. |
+| `add <name> <url> [prefix]` | workspace root | Clone `repos/<name>`, record metadata, and add a subtree prefix to local `main`. |
 | `pull [repo...]` | workspace root on `main` | Fast-forward base clones and subtree-pull repo defaults into local `main`. |
 | `branch <task> [repo...]` | workspace root | Create `worktrees/<task>` as one workspace Git worktree on branch `<task>`. |
 | `status [repo...]` | root or task root | Show workspace/base status or per-prefix task status. |

@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-#MISE description="Clone an upstream repo into repos/<name> and add its subtree. Usage: add <name> <url> [branch] [prefix]"
+#MISE description="Clone an upstream repo into repos/<name> and add its subtree. Usage: add <name> <url> [prefix]"
 source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
 
 name=${1:-}
 url=${2:-}
-branch=${3:-}
-prefix=${4:-}
+prefix=${3:-}
 
-[[ -z "$name" || -z "$url" ]] && die "usage: mise run add <name> <url> [branch] [prefix]"
+[[ -z "$name" || -z "$url" || $# -gt 3 ]] && die "usage: mise run add <name> <url> [prefix]"
 validate_name "repo" "$name"
 require_workspace_root
 
@@ -25,12 +24,8 @@ if [[ -e "$dest" ]]; then
 fi
 
 info "cloning $name"
-if [[ -n "$branch" ]]; then
-  git clone --branch "$branch" "$url" "$dest"
-else
-  git clone "$url" "$dest"
-  branch=$(repo_default_branch "$dest")
-fi
+git clone "$url" "$dest"
+branch=$(repo_default_branch "$dest")
 
 git -C "$dest" config workspace.defaultBranch "$branch"
 git -C "$dest" config workspace.prefix "$prefix"
