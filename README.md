@@ -85,7 +85,7 @@ Push PR branches back to each repo:
 mise run push
 ```
 
-`mise run push` checks which repo prefixes changed, replays the matching workspace commits into a temporary checkout of each upstream repo with the prefix stripped, and pushes branch `wire-api-me` to each changed repo.
+`mise run push` checks which repo prefixes changed and runs `git subtree push --prefix <prefix> <remote> wire-api-me` for each changed repo.
 
 Clean up the local workspace worktree after merge:
 
@@ -139,4 +139,4 @@ That consistency is the point of the workflow: treat a multi-repo feature as one
 mise run test
 ```
 
-The tests create temporary local upstream repos and exercise add, branch, subtree commit, prefix push, pull, and cleanup.
+The tests create temporary local upstream repos and exercise add, branch, subtree commit, subtree push, pull, and cleanup.
