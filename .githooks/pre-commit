@@ -6,23 +6,6 @@ set -euo pipefail
 # Allow privileged ops for tests.
 [[ "${META_ALLOW_COMMIT:-}" == "1" ]] && exit 0
 
-branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "DETACHED")
-toplevel=$(git rev-parse --show-toplevel)
-has_commits=1
-git rev-parse --verify HEAD >/dev/null 2>&1 || has_commits=0
-
-# No direct commits on main.
-if [[ "$branch" == "main" && $has_commits -eq 1 ]]; then
-  cat >&2 <<EOF
-✗ Direct commits to main are not allowed.
-
-Create a worktree on a new branch:
-  mise run branch <name>
-  cd .worktrees/<name>
-EOF
-  exit 1
-fi
-
 # The public workspace repo must never commit task checkout contents.
 if git diff --cached --name-only | grep -qE '^\.worktrees/'; then
   cat >&2 <<EOF

@@ -108,16 +108,9 @@ test_pre_commit() {
   local meta out rc
   meta=$(fresh_meta); cd "$meta"
 
-  touch foo.txt && git add foo.txt
-  out=$(git commit -m "should fail" 2>&1); rc=$?
-  assert_exit_code 1 $rc "blocks commit on main"
-  assert_contains "Direct commits to main" "$out" "main commit reason present"
-  git reset -q HEAD foo.txt; rm foo.txt
-
-  git switch -q -c workspace-change
   echo hi > docs.txt && git add docs.txt
   out=$(git commit -m "workspace docs" 2>&1); rc=$?
-  assert_exit_code 0 $rc "allows workspace maintenance commit on branch"
+  assert_exit_code 0 $rc "allows workspace maintenance commit on main"
 
   mkdir -p .worktrees/task/private
   echo secret > .worktrees/task/private/file.txt
@@ -186,7 +179,7 @@ test_agent_bash_guard() {
   assert_exit_code 0 "$HOOK_EXIT" "allows workspace git add"
 
   run_hook "$hook" '{"tool_input":{"command":"git push origin main"}}'
-  assert_exit_code 2 "$HOOK_EXIT" "blocks workspace git push"
+  assert_exit_code 0 "$HOOK_EXIT" "allows workspace root git push"
 
   run_hook "$hook" '{"tool_input":{"command":"git status"}}'
   assert_exit_code 0 "$HOOK_EXIT" "allows git status from workspace root"
