@@ -87,7 +87,7 @@ test_structural() {
            opencode.json .claude/settings.json \
            .githooks/pre-commit .githooks/agent-guard-edit.sh \
            .githooks/agent-guard-bash.sh .githooks/agent-guard-context.sh \
-           mise-tasks/_lib mise-tasks/_init mise-tasks/add mise-tasks/bootstrap \
+           mise-tasks/_lib mise-tasks/add mise-tasks/bootstrap \
            mise-tasks/branch mise-tasks/clean \
            mise-tasks/diff mise-tasks/list mise-tasks/pull mise-tasks/push \
            mise-tasks/status mise-tasks/test tests/run.sh; do
