@@ -8,7 +8,7 @@ task=$(task_root)
 branch=$(task_name)
 current=$(git -C "$task" symbolic-ref --short HEAD 2>/dev/null || true)
 [[ "$current" == "$branch" ]] || die "workspace worktree is on branch '$current', expected '$branch'"
-workspace_clean "$task" || die "worktrees/$branch has uncommitted changes; commit before push"
+workspace_clean "$task" || die ".worktrees/$branch has uncommitted changes; commit before push"
 
 repos=("$@")
 if [[ ${#repos[@]} -eq 0 ]]; then
@@ -16,16 +16,14 @@ if [[ ${#repos[@]} -eq 0 ]]; then
   while IFS= read -r repo; do repos+=("$repo"); done < <(list_task_repos)
 fi
 
-[[ ${#repos[@]} -gt 0 ]] || die "no repo prefixes found in worktrees/$branch"
+[[ ${#repos[@]} -gt 0 ]] || die "no repo prefixes found in .worktrees/$branch"
 
 pushed=0
 for repo in "${repos[@]}"; do
   validate_name "repo" "$repo"
-  base="$root/repos/$repo"
-  [[ -d "$base/.git" || -f "$base/.git" ]] || die "repos/$repo is not a git repo"
 
   prefix=$(repo_prefix "$repo")
-  [[ -e "$task/$prefix" ]] || die "worktrees/$branch is missing prefix $prefix for $repo"
+  [[ -e "$task/$prefix" ]] || die ".worktrees/$branch is missing prefix $prefix for $repo"
 
   if git -C "$task" diff --quiet main..HEAD -- "$prefix"; then
     info "skipping $repo — no changes under $prefix"

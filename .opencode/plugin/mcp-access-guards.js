@@ -77,13 +77,13 @@ function gitSourceGuidance(value) {
   const repoName = repoNameFromPath(repoPath)
   const remote = `git@${host}:${repoPath}.git`
   const addCommand = ["mise", "run", "add", repoName, remote].map(shellQuote).join(" ")
-  const localPath = filePath ? `repos/${repoName}/${filePath}` : `repos/${repoName}`
+  const localPath = filePath ? `${repoName}/${filePath}` : repoName
 
   return (
     "Do not use WebFetch for GitHub/GitLab repository content. " +
-    `Clone the repo into this workspace and inspect it locally instead: \`${addCommand}\`, ` +
+    `Import the repo into this workspace and inspect it locally instead: \`${addCommand}\`, ` +
     `then read \`${localPath}\` from the default branch. ` +
-    "If you need an isolated task branch after adding the repo, run `mise run branch <task> <repo>` and work under `worktrees/<task>/<repo>/`."
+    "If you need an isolated task branch after adding the repo, run `mise run branch <task> <repo>` and work under `.worktrees/<task>/<repo>/`."
   )
 }
 

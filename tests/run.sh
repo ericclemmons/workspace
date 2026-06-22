@@ -119,13 +119,13 @@ test_pre_commit() {
   out=$(git commit -m "workspace docs" 2>&1); rc=$?
   assert_exit_code 0 $rc "allows workspace maintenance commit on branch"
 
-  mkdir -p repos/private worktrees/task/private
-  echo secret > repos/private/file.txt
-  git add -f repos/private/file.txt
+  mkdir -p .worktrees/task/private
+  echo secret > .worktrees/task/private/file.txt
+  git add -f .worktrees/task/private/file.txt
   out=$(git commit -m "should fail" 2>&1); rc=$?
-  assert_exit_code 1 $rc "blocks committing repos content"
-  assert_contains "cannot include repos/ or worktrees/" "$out" "repos block reason present"
-  git reset -q HEAD repos/private/file.txt
+  assert_exit_code 1 $rc "blocks committing task worktree content"
+  assert_contains "cannot include .worktrees/" "$out" "worktrees block reason present"
+  git reset -q HEAD .worktrees/task/private/file.txt
 }
 
 test_bootstrap_task() {
@@ -147,7 +147,7 @@ test_bootstrap_task() {
   assert_exit_code 0 $rc "bootstrap initializes local workspace"
   [[ -d "$meta/.git" ]] && pass "bootstrap created .git" || fail "bootstrap created .git"
   [[ "$(git config --get core.hooksPath)" == ".githooks" ]] && pass "bootstrap configured hooks" || fail "bootstrap configured hooks"
-  [[ -d "$meta/repos" && -d "$meta/worktrees" ]] && pass "bootstrap created workspace directories" || fail "bootstrap created workspace directories"
+  [[ -d "$meta/.worktrees" ]] && pass "bootstrap created workspace directories" || fail "bootstrap created workspace directories"
   git log --oneline -1 | grep -q "Initialize workspace" && pass "bootstrap created initial commit" || fail "bootstrap created initial commit"
 
   out=$(bash mise-tasks/bootstrap 2>&1); rc=$?
@@ -162,12 +162,8 @@ test_agent_edit_guard() {
   meta=$(fresh_meta); cd "$meta"
   hook="$meta/.githooks/agent-guard-edit.sh"
 
-  run_hook "$hook" "{\"tool_input\":{\"file_path\":\"$meta/repos/fake/README.md\"}}"
-  assert_exit_code 2 "$HOOK_EXIT" "blocks edit inside repos/"
-  assert_contains "Base repos are read-only" "$HOOK_STDERR" "repos edit reason present"
-
-  mkdir -p "$meta/worktrees/feat-x/fake"
-  run_hook "$hook" "{\"tool_input\":{\"file_path\":\"$meta/worktrees/feat-x/fake/README.md\"}}"
+  mkdir -p "$meta/.worktrees/feat-x/fake"
+  run_hook "$hook" "{\"tool_input\":{\"file_path\":\"$meta/.worktrees/feat-x/fake/README.md\"}}"
   assert_exit_code 0 "$HOOK_EXIT" "allows edit inside task repo worktree"
 
   run_hook "$hook" "{\"tool_input\":{\"file_path\":\"$meta/README.md\"}}"
@@ -176,7 +172,7 @@ test_agent_edit_guard() {
   run_hook "$hook" "{\"tool_input\":{\"file_path\":\"$meta/opencode.json\"}}"
   assert_exit_code 2 "$HOOK_EXIT" "blocks edit to workspace config"
 
-  run_hook "$hook" "{\"tool_input\":{\"path\":\"$meta/worktrees/feat-x/fake/file.txt\"}}"
+  run_hook "$hook" "{\"tool_input\":{\"path\":\"$meta/.worktrees/feat-x/fake/file.txt\"}}"
   assert_exit_code 0 "$HOOK_EXIT" "supports .path key"
 }
 
@@ -201,18 +197,13 @@ test_agent_bash_guard() {
   run_hook "$hook" '{"tool_input":{"command":"git config core.hooksPath /tmp"}}'
   assert_exit_code 2 "$HOOK_EXIT" "blocks core.hooksPath modification"
 
-  run_hook "$hook" '{"tool_input":{"command":"git worktree remove --force worktrees/feat-x/fake"}}'
+  run_hook "$hook" '{"tool_input":{"command":"git worktree remove --force .worktrees/feat-x/fake"}}'
   assert_exit_code 2 "$HOOK_EXIT" "blocks --force worktree remove"
 
   upstream=$(fake_upstream fake)
   bash mise-tasks/add fake "$upstream" >/dev/null
-  cd repos/fake
-  run_hook "$hook" '{"tool_input":{"command":"git commit -m bad"}}'
-  assert_exit_code 2 "$HOOK_EXIT" "blocks git commit inside repos/"
-
-  cd "$meta"
   bash mise-tasks/branch feat-x fake >/dev/null
-  cd worktrees/feat-x/fake
+  cd .worktrees/feat-x/fake
   run_hook "$hook" '{"tool_input":{"command":"git commit -m good"}}'
   assert_exit_code 0 "$HOOK_EXIT" "allows git commit inside task repo worktree"
 }
@@ -226,11 +217,8 @@ test_agent_context_guard() {
   out=$("$hook")
   echo "$out" | grep -q "workspace root" && pass "emits reminder from workspace root" || fail "emits reminder from workspace root" "got: $out"
 
-  upstream=$(fake_upstream fake)
-  bash mise-tasks/add fake "$upstream" >/dev/null
-  cd repos/fake
-  out=$("$hook")
-  echo "$out" | grep -q "read-only base clones" && pass "emits reminder from repos/" || fail "emits reminder from repos/" "got: $out"
+  run_hook "$hook" '{"tool_input":{"command":"true"}}'
+  assert_exit_code 0 "$HOOK_EXIT" "context hook accepts non-root paths"
 }
 
 test_mise_tasks() {
@@ -241,12 +229,13 @@ test_mise_tasks() {
   staging_upstream=$(fake_upstream staging-repo staging)
 
   out=$(bash mise-tasks/add fake "$upstream" 2>&1); rc=$?
-  assert_exit_code 0 $rc "add clones a base repo"
-  [[ -d "$meta/repos/fake/.git" ]] && pass "add created repos/fake clone" || fail "add created repos/fake clone"
+  assert_exit_code 0 $rc "add registers a subtree repo"
+  [[ "$(git remote get-url workspace-fake)" == "$upstream" ]] && pass "add registered workspace remote" || fail "add registered workspace remote"
+  [[ -f "$meta/fake/README.md" ]] && pass "add created fake subtree" || fail "add created fake subtree"
 
   out=$(bash mise-tasks/add staging-repo "$staging_upstream" 2>&1); rc=$?
-  assert_exit_code 0 $rc "add clones remote default branch"
-  [[ "$(git -C "$meta/repos/staging-repo" config --get workspace.defaultBranch)" == "staging" ]] && pass "add records remote default branch" || fail "add records remote default branch"
+  assert_exit_code 0 $rc "add imports remote default branch"
+  [[ "$(git config --get remote.workspace-staging-repo.workspaceDefaultBranch)" == "staging" ]] && pass "add records remote default branch" || fail "add records remote default branch"
 
   out=$(bash mise-tasks/add too-many "$upstream" main prefix 2>&1 || true)
   assert_contains "usage: mise run add <name> <url> \[prefix\]" "$out" "add rejects branch argument"
@@ -256,8 +245,8 @@ test_mise_tasks() {
 
   out=$(bash mise-tasks/branch jira-123 2>&1); rc=$?
   assert_exit_code 0 $rc "branch creates task repo worktree"
-  [[ -f "$meta/worktrees/jira-123/fake/README.md" ]] && pass "branch created worktrees/jira-123/fake prefix" || fail "branch created worktrees/jira-123/fake prefix"
-  [[ "$(git -C "$meta/worktrees/jira-123/fake" symbolic-ref --short HEAD)" == "jira-123" ]] && pass "branch name matches task" || fail "branch name matches task"
+  [[ -f "$meta/.worktrees/jira-123/fake/README.md" ]] && pass "branch created .worktrees/jira-123/fake prefix" || fail "branch created .worktrees/jira-123/fake prefix"
+  [[ "$(git -C "$meta/.worktrees/jira-123" symbolic-ref --short HEAD)" == "jira-123" ]] && pass "branch name matches task" || fail "branch name matches task"
 
   out=$(bash mise-tasks/branch jira-123 2>&1); rc=$?
   assert_exit_code 0 $rc "branch idempotent on existing"
@@ -266,7 +255,7 @@ test_mise_tasks() {
   out=$(bash mise-tasks/status 2>&1); rc=$?
   assert_exit_code 0 $rc "status works from workspace root"
 
-  cd worktrees/jira-123
+  cd .worktrees/jira-123
   out=$(bash "$meta/mise-tasks/status" 2>&1); rc=$?
   assert_exit_code 0 $rc "status works from task root"
 
@@ -289,17 +278,17 @@ test_end_to_end() {
   bash mise-tasks/branch clean-only >/dev/null
   out=$(bash mise-tasks/clean clean-only 2>&1); rc=$?
   assert_exit_code 0 $rc "clean removes clean task worktrees"
-  [[ ! -e "$meta/worktrees/clean-only/fakerepo" ]] && pass "clean removed repo worktree" || fail "clean removed repo worktree"
+  [[ ! -e "$meta/.worktrees/clean-only/fakerepo" ]] && pass "clean removed repo worktree" || fail "clean removed repo worktree"
 
   bash mise-tasks/branch e2e >/dev/null
-  cd worktrees/e2e/fakerepo
+  cd .worktrees/e2e/fakerepo
   git config user.email "t@t"
   git config user.name "Task"
   echo change >> README.md
   git add README.md
   git commit -q -m "test change"
 
-  cd "$meta/worktrees/e2e"
+  cd "$meta/.worktrees/e2e"
   out=$(bash "$meta/mise-tasks/push" 2>&1); rc=$?
   assert_exit_code 0 $rc "push pushes changed repo branch"
   assert_contains "pushed fakerepo" "$out" "push reports repo"
@@ -319,9 +308,9 @@ test_end_to_end() {
 
   cd "$meta"
   out=$(bash mise-tasks/pull fakerepo 2>&1); rc=$?
-  assert_exit_code 0 $rc "pull fast-forwards base repo"
-  git -C repos/fakerepo log --oneline -1 | grep -q upstream && pass "base repo received upstream commit" || fail "base repo received upstream commit"
-  [[ ! -e "$meta/worktrees/e2e/fakerepo" ]] && pass "pull removed merged repo worktree" || fail "pull removed merged repo worktree"
+  assert_exit_code 0 $rc "pull updates subtree"
+  grep -q upstream "$meta/fakerepo/README.md" && pass "subtree received upstream commit" || fail "subtree received upstream commit"
+  [[ ! -e "$meta/.worktrees/e2e/fakerepo" ]] && pass "pull removed merged repo worktree" || fail "pull removed merged repo worktree"
 }
 
 test_cross_repo_subtree_push() {
@@ -338,7 +327,7 @@ test_cross_repo_subtree_push() {
   bash mise-tasks/add ui "$ui" packages/ui >/dev/null
   bash mise-tasks/branch wire-me >/dev/null
 
-  cd worktrees/wire-me
+  cd .worktrees/wire-me
   git config user.email "t@t"
   git config user.name "Task"
   echo dashboard >> apps/dashboard/README.md

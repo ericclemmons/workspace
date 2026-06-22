@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Clone an upstream repo into repos/<name> and add its subtree. Usage: add <name> <url> [prefix]"
+#MISE description="Register an upstream repo remote and add its subtree. Usage: add <name> <url> [prefix]"
 source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
 
 name=${1:-}
@@ -11,25 +11,24 @@ validate_name "repo" "$name"
 require_workspace_root
 
 root=$(workspace_root)
-mkdir -p "$root/repos"
-dest="$root/repos/$name"
+remote=$(repo_remote "$name")
 [[ -n "$prefix" ]] || prefix="$name"
 [[ "$prefix" != /* && "$prefix" != *..* && "$prefix" != "." ]] || die "invalid prefix: '$prefix'"
 
-if [[ -e "$dest" ]]; then
-  [[ -d "$dest/.git" || -f "$dest/.git" ]] || die "repos/$name already exists and is not a git repo"
-  existing=$(git -C "$dest" remote get-url origin 2>/dev/null || true)
-  [[ "$existing" == "$url" ]] || die "repos/$name already exists with different origin: $existing"
-  die "repos/$name already exists"
+if git remote get-url "$remote" >/dev/null 2>&1; then
+  existing=$(git remote get-url "$remote")
+  [[ "$existing" == "$url" ]] || die "$name already exists with different origin: $existing"
+  die "$name already exists"
 fi
 
-info "cloning $name"
-git clone "$url" "$dest"
-branch=$(repo_default_branch "$dest")
+workspace_clean "$root" || die "workspace has uncommitted changes; commit or stash first"
 
-git -C "$dest" config workspace.defaultBranch "$branch"
-git -C "$dest" config workspace.prefix "$prefix"
+branch=$(remote_default_branch "$url")
+info "registering $name"
+git remote add "$remote" "$url"
+git config "remote.$remote.workspaceDefaultBranch" "$branch"
+git config "remote.$remote.workspacePrefix" "$prefix"
 
 ensure_subtree_on_current_branch "$name"
 
-ok "added repos/$name (origin: $url, default branch: $branch, prefix: $prefix)"
+ok "added $name (origin: $url, default branch: $branch, prefix: $prefix)"

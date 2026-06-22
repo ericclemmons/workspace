@@ -10,7 +10,7 @@ if [[ ! -d .git ]]; then
   git init -b main
 fi
 
-mkdir -p repos worktrees
+mkdir -p .worktrees
 git config --local include.path ../.gitconfig
 
 if [[ -d .githooks ]]; then

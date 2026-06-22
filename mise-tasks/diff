@@ -25,12 +25,12 @@ if [[ ${#repos[@]} -eq 0 ]]; then
   while IFS= read -r repo; do repos+=("$repo"); done < <(list_task_repos)
 fi
 
-[[ ${#repos[@]} -gt 0 ]] || die "no repo worktrees found in worktrees/$branch"
+[[ ${#repos[@]} -gt 0 ]] || die "no repo worktrees found in .worktrees/$branch"
 
 for repo in "${repos[@]}"; do
   validate_name "repo" "$repo"
   prefix=$(repo_prefix "$repo")
-  [[ -e "$task/$prefix" ]] || die "worktrees/$branch is missing prefix $prefix for $repo"
+  [[ -e "$task/$prefix" ]] || die ".worktrees/$branch is missing prefix $prefix for $repo"
   echo
   info "diff: $repo ($prefix)"
   if [[ ${#diff_args[@]} -gt 0 ]]; then

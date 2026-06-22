@@ -5,9 +5,9 @@ An opinionated local workspace for working across multiple repositories as if th
 The workspace repo is configuration and coordination only. It should be installed like dotfiles with `tiged` or a tarball download, then used as a local-only Git repo. Do not clone it as the repo you push feature branches to.
 
 ```txt
-repos/<repo>/          # base clone, default branch, read-only cache
-worktrees/<task>/      # one local workspace git worktree, branch == task
-worktrees/<task>/<repo-or-prefix>/  # repo contents imported with git subtree
+<prefix>/             # first-class subtree folder imported from an upstream repo
+.worktrees/<task>/    # one local workspace git worktree, branch == task
+.worktrees/<task>/<prefix>/  # task copy of a subtree folder
 ```
 
 ## Install
@@ -40,7 +40,7 @@ Arguments:
 add <name> <url> [prefix]
 ```
 
-`add` clones the upstream repo's default branch. If `prefix` is omitted, the repo appears at `<name>`. The base clone stays in `repos/<name>`, and the source is imported into local `main` with `git subtree`.
+`add` registers a `workspace-<name>` remote, records the upstream default branch and subtree prefix in Git config, and imports the default branch into local `main` with `git subtree`. If `prefix` is omitted, the repo appears at `<name>`.
 
 ## Daily Workflow
 
@@ -54,7 +54,7 @@ Start a cohesive feature branch/worktree:
 
 ```bash
 mise run branch wire-api-me
-cd worktrees/wire-api-me
+cd .worktrees/wire-api-me
 ```
 
 Now edit across repo prefixes in one checkout:
@@ -100,7 +100,7 @@ mise run clean wire-api-me
 The task name, workspace branch, workspace worktree name, and per-repo pushed branch all match:
 
 ```txt
-worktrees/wire-api-me
+.worktrees/wire-api-me
 workspace branch: wire-api-me
 dashboard branch: wire-api-me
 api branch: wire-api-me
@@ -113,10 +113,10 @@ That consistency is the point of the workflow: treat a multi-repo feature as one
 
 | Task | Where | What it does |
 |---|---|---|
-| `add <name> <url> [prefix]` | workspace root | Clone `repos/<name>`, record metadata, and add a subtree prefix to local `main`. |
-| `pull [repo...]` | workspace root on `main` | Fast-forward base clones and subtree-pull repo defaults into local `main`. |
-| `branch <task> [repo...]` | workspace root | Create `worktrees/<task>` as one workspace Git worktree on branch `<task>`. |
-| `status [repo...]` | root or task root | Show workspace/base status or per-prefix task status. |
+| `add <name> <url> [prefix]` | workspace root | Register `workspace-<name>`, record metadata, and add a subtree prefix to local `main`. |
+| `pull [repo...]` | workspace root on `main` | Fetch upstream remotes and subtree-pull repo defaults into local `main`. |
+| `branch <task> [repo...]` | workspace root | Create `.worktrees/<task>` as one workspace Git worktree on branch `<task>`. |
+| `status [repo...]` | root or task root | Show workspace or per-prefix task status. |
 | `diff [repo...] [-- args]` | task root | Show per-prefix diffs against `main`, plus uncommitted diffs. |
 | `push [repo...]` | task root | Split changed prefixes and push branch `<task>` to each repo. |
 | `clean <task>` | workspace root | Remove a clean workspace task worktree. |
@@ -125,9 +125,9 @@ That consistency is the point of the workflow: treat a multi-repo feature as one
 
 ## Rules
 
-- `repos/*` is read-only cache state.
-- Source edits happen in `worktrees/<task>/<prefix>/*`.
-- Commit from `worktrees/<task>`, not from `repos/*`.
+- Top-level subtree folders are first-class source snapshots.
+- Source edits happen in `.worktrees/<task>/<prefix>/*`.
+- Commit task work from `.worktrees/<task>`.
 - Use `mise run pull` instead of root `git pull` for repo sync.
 - Use `mise run push` instead of root `git push` for repo PR branches.
 - The workspace root is local-only and should not be pushed.

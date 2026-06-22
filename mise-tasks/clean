@@ -8,11 +8,11 @@ validate_name "task" "$task_name_arg"
 require_workspace_root
 
 root=$(workspace_root)
-task="$root/worktrees/$task_name_arg"
-[[ -d "$task" ]] || die "worktrees/$task_name_arg does not exist"
-[[ -d "$task/.git" || -f "$task/.git" ]] || die "worktrees/$task_name_arg is not a workspace git worktree"
-workspace_clean "$task" || die "worktrees/$task_name_arg has uncommitted changes; commit or discard them first"
+task="$root/.worktrees/$task_name_arg"
+[[ -d "$task" ]] || die ".worktrees/$task_name_arg does not exist"
+[[ -d "$task/.git" || -f "$task/.git" ]] || die ".worktrees/$task_name_arg is not a workspace git worktree"
+workspace_clean "$task" || die ".worktrees/$task_name_arg has uncommitted changes; commit or discard them first"
 
-info "removing worktrees/$task_name_arg"
+info "removing .worktrees/$task_name_arg"
 git -C "$root" worktree remove "$task"
-ok "cleaned worktrees/$task_name_arg"
+ok "cleaned .worktrees/$task_name_arg"

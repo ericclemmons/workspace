@@ -18,18 +18,18 @@ if [[ "$branch" == "main" && $has_commits -eq 1 ]]; then
 
 Create a worktree on a new branch:
   mise run branch <name>
-  cd worktrees/<name>
+  cd .worktrees/<name>
 EOF
   exit 1
 fi
 
-# The public workspace repo must never commit private/base checkout contents.
-if git diff --cached --name-only | grep -qE '^(repos|worktrees)/'; then
+# The public workspace repo must never commit task checkout contents.
+if git diff --cached --name-only | grep -qE '^\.worktrees/'; then
   cat >&2 <<EOF
-✗ Workspace commits cannot include repos/ or worktrees/.
+✗ Workspace commits cannot include .worktrees/.
 
-repos/ contains base clones and worktrees/ contains per-task repo worktrees.
-Only commit workspace tooling, docs, hooks, and config in this repo.
+.worktrees/ contains per-task workspace checkouts.
+Only commit subtree snapshots, workspace tooling, docs, hooks, and config in this repo.
 EOF
   exit 1
 fi

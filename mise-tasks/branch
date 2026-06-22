@@ -11,7 +11,7 @@ validate_name "branch" "$branch"
 require_workspace_root
 
 root=$(workspace_root)
-task="$root/worktrees/$branch"
+task="$root/.worktrees/$branch"
 
 repos=("$@")
 if [[ ${#repos[@]} -eq 0 ]]; then
@@ -24,10 +24,10 @@ fi
 workspace_clean "$root" || die "workspace has uncommitted changes; commit or stash first"
 
 if [[ -d "$task/.git" || -f "$task/.git" ]]; then
-  info "workspace worktree already exists: worktrees/$branch"
+  info "workspace worktree already exists: .worktrees/$branch"
 else
-  [[ ! -e "$task" ]] || die "worktrees/$branch exists and is not a git worktree"
-  mkdir -p "$root/worktrees"
+  [[ ! -e "$task" ]] || die ".worktrees/$branch exists and is not a git worktree"
+  mkdir -p "$root/.worktrees"
   if git show-ref --verify --quiet "refs/heads/$branch"; then
     info "adding workspace worktree on existing branch $branch"
     git worktree add -q "$task" "$branch"
@@ -39,13 +39,12 @@ fi
 
 for repo in "${repos[@]}"; do
   validate_name "repo" "$repo"
-  base="$root/repos/$repo"
-  [[ -d "$base/.git" || -f "$base/.git" ]] || die "repos/$repo is not a git repo"
-  repo_clean "$base" || die "repos/$repo has uncommitted changes; clean it before branching"
-  git -C "$base" fetch --prune origin
+  remote=$(ensure_workspace_remote "$repo")
+  default=$(repo_default_branch "$repo")
+  git fetch --prune "$remote" "$default"
   ( cd "$task" && ensure_subtree_on_current_branch "$repo" )
 done
 
-ok "ready: worktrees/$branch"
+ok "ready: .worktrees/$branch"
 echo
-echo "Next: ${C_BOLD}cd worktrees/$branch${C_RESET}"
+echo "Next: ${C_BOLD}cd .worktrees/$branch${C_RESET}"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Pull workspace config, base repos, and default subtree prefixes. Usage: pull [repo...]"
+#MISE description="Pull workspace config and default subtree prefixes. Usage: pull [repo...]"
 source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
 
 require_workspace_root
@@ -26,36 +26,23 @@ if [[ ${#repos[@]} -eq 0 ]]; then
   exit 0
 fi
 
-base_paths=()
-defaults=()
-for repo in "${repos[@]}"; do
-  validate_name "repo" "$repo"
-  base="$root/repos/$repo"
-  [[ -d "$base/.git" || -f "$base/.git" ]] || die "repos/$repo is not a git repo"
-  repo_clean "$base" || die "repos/$repo has uncommitted changes; base repos must stay clean"
-
-  default=$(repo_default_branch "$base")
-  base_paths+=("$base")
-  defaults+=("$default")
-done
-
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-pull_repo() {
-  local repo=$1 base=$2 default=$3
-  info "pulling base repo $repo ($default)"
-  git -C "$base" fetch --prune origin
-  git -C "$base" switch -q "$default"
-  git -C "$base" pull --ff-only origin "$default"
-  ok "pulled base repo $repo"
+fetch_repo() {
+  local repo=$1 remote default
+  remote=$(ensure_workspace_remote "$repo")
+  default=$(repo_default_branch "$repo")
+  info "fetching $repo ($default)"
+  git fetch --prune "$remote" "$default"
+  ok "fetched $repo"
 }
 
 cleanup_merged_tasks() {
-  local task branch repo base default split remote found_branch can_clean
-  [[ -d "$root/worktrees" ]] || return 0
+  local task branch repo default prefix split remote found_branch can_clean
+  [[ -d "$root/.worktrees" ]] || return 0
 
-  for task in "$root"/worktrees/*; do
+  for task in "$root"/.worktrees/*; do
     [[ -d "$task" ]] || continue
     [[ -d "$task/.git" || -f "$task/.git" ]] || continue
     workspace_clean "$task" || continue
@@ -64,18 +51,17 @@ cleanup_merged_tasks() {
     found_branch=0
     can_clean=1
     while IFS= read -r repo; do
-      [[ -e "$task/$(repo_prefix "$repo")" ]] || continue
-      base="$root/repos/$repo"
-      [[ -d "$base/.git" || -f "$base/.git" ]] || { can_clean=0; break; }
+      prefix=$(repo_prefix "$repo")
+      [[ -e "$task/$prefix" ]] || continue
+      remote=$(cd "$task" && ensure_workspace_remote "$repo")
 
-      if git -C "$base" show-ref --verify --quiet "refs/remotes/origin/$branch"; then
+      if git -C "$task" ls-remote --heads "$remote" "$branch" | grep -q .; then
         found_branch=1
-        default=$(repo_default_branch "$base")
-        split=$(git -C "$task" subtree split --prefix "$(repo_prefix "$repo")" HEAD)
-        remote=$(cd "$task" && ensure_workspace_remote "$repo")
+        default=$(repo_default_branch "$repo")
+        split=$(git -C "$task" subtree split --prefix "$prefix" HEAD)
         git -C "$task" fetch "$remote" "$default"
         git -C "$task" merge-base --is-ancestor "$split" "$remote/$default" || { can_clean=0; break; }
-      elif ! git -C "$task" diff --quiet main..HEAD -- "$(repo_prefix "$repo")"; then
+      elif ! git -C "$task" diff --quiet main..HEAD -- "$prefix"; then
         can_clean=0
         break
       fi
@@ -93,10 +79,10 @@ cleanup_merged_tasks() {
 
 pids=()
 outputs=()
-for i in "${!repos[@]}"; do
-  repo=${repos[$i]}
+for repo in "${repos[@]}"; do
+  validate_name "repo" "$repo"
   out="$tmp/$repo.out"
-  pull_repo "$repo" "${base_paths[$i]}" "${defaults[$i]}" >"$out" 2>&1 &
+  fetch_repo "$repo" >"$out" 2>&1 &
   pids+=("$!")
   outputs+=("$out")
 done
@@ -116,11 +102,10 @@ done
 current=$(workspace_branch)
 [[ "$current" == "main" ]] || die "pull subtree updates from main; current branch is $current"
 
-[[ $failed -eq 0 ]] || die "one or more repos failed to pull"
+[[ $failed -eq 0 ]] || die "one or more repos failed to fetch"
 
-for i in "${!repos[@]}"; do
-  repo=${repos[$i]}
-  default=${defaults[$i]}
+for repo in "${repos[@]}"; do
+  default=$(repo_default_branch "$repo")
   prefix=$(repo_prefix "$repo")
   remote=$(ensure_workspace_remote "$repo")
   if [[ -e "$prefix" ]]; then
