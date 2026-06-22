@@ -5,6 +5,7 @@
 jq = "latest"
 hk = "latest"
 pkl = "latest"
+terraform = "latest"
 
 [settings]
 experimental = true

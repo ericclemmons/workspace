@@ -313,8 +313,8 @@ test_end_to_end() {
   [[ ! -e "$meta/.worktrees/e2e/fakerepo" ]] && pass "pull removed merged repo worktree" || fail "pull removed merged repo worktree"
 }
 
-test_cross_repo_subtree_push() {
-  section "cross-repo subtree push"
+test_cross_repo_prefix_push() {
+  section "cross-repo prefix push"
   local meta dashboard api ui out rc repo
   meta=$(fresh_meta); cd "$meta"
 
@@ -337,7 +337,7 @@ test_cross_repo_subtree_push() {
   git commit -q -m "wire me"
 
   out=$(bash "$meta/mise-tasks/push" 2>&1); rc=$?
-  assert_exit_code 0 $rc "push split-pushes cross-repo workspace commit"
+  assert_exit_code 0 $rc "push sends cross-repo workspace commit"
   assert_contains "pushed 3 repo" "$out" "push reports three repos"
 
   for repo in dashboard api ui; do
@@ -369,7 +369,7 @@ test_agent_bash_guard
 test_agent_context_guard
 test_mise_tasks
 test_end_to_end
-test_cross_repo_subtree_push
+test_cross_repo_prefix_push
 
 echo
 echo "─────────────────────────────────────"

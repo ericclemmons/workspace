@@ -79,13 +79,13 @@ mise run status
 mise run diff
 ```
 
-Push split PR branches back to each repo:
+Push PR branches back to each repo:
 
 ```bash
 mise run push
 ```
 
-`mise run push` checks which repo prefixes changed, runs `git subtree split --prefix <prefix> HEAD`, and pushes branch `wire-api-me` to each changed repo. If a repo branch already exists, it refreshes it with an explicit `--force-with-lease`.
+`mise run push` checks which repo prefixes changed, replays the matching workspace commits into a temporary checkout of each upstream repo with the prefix stripped, and pushes branch `wire-api-me` to each changed repo.
 
 Clean up the local workspace worktree after merge:
 
@@ -118,7 +118,7 @@ That consistency is the point of the workflow: treat a multi-repo feature as one
 | `branch <task> [repo...]` | workspace root | Create `.worktrees/<task>` as one workspace Git worktree on branch `<task>`. |
 | `status [repo...]` | root or task root | Show workspace or per-prefix task status. |
 | `diff [repo...] [-- args]` | task root | Show per-prefix diffs against `main`, plus uncommitted diffs. |
-| `push [repo...]` | task root | Split changed prefixes and push branch `<task>` to each repo. |
+| `push [repo...]` | task root | Push changed prefixes to branch `<task>` in each repo. |
 | `clean <task>` | workspace root | Remove a clean workspace task worktree. |
 | `list` | workspace root | List configured repos, prefixes, and task worktrees. |
 | `test` | anywhere | Run the validation suite. |
@@ -139,4 +139,4 @@ That consistency is the point of the workflow: treat a multi-repo feature as one
 mise run test
 ```
 
-The tests create temporary local upstream repos and exercise add, branch, subtree commit, split push, pull, and cleanup.
+The tests create temporary local upstream repos and exercise add, branch, subtree commit, prefix push, pull, and cleanup.

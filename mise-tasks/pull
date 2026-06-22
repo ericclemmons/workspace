@@ -39,7 +39,7 @@ fetch_repo() {
 }
 
 cleanup_merged_tasks() {
-  local task branch repo default prefix split remote found_branch can_clean
+  local task branch repo default prefix remote found_branch can_clean
   [[ -d "$root/.worktrees" ]] || return 0
 
   for task in "$root"/.worktrees/*; do
@@ -58,9 +58,8 @@ cleanup_merged_tasks() {
       if git -C "$task" ls-remote --heads "$remote" "$branch" | grep -q .; then
         found_branch=1
         default=$(repo_default_branch "$repo")
-        split=$(git -C "$task" subtree split --prefix "$prefix" HEAD)
-        git -C "$task" fetch "$remote" "$default"
-        git -C "$task" merge-base --is-ancestor "$split" "$remote/$default" || { can_clean=0; break; }
+        git -C "$task" fetch "$remote" "$default" "$branch"
+        git -C "$task" merge-base --is-ancestor "$remote/$branch" "$remote/$default" || { can_clean=0; break; }
       elif ! git -C "$task" diff --quiet main..HEAD -- "$prefix"; then
         can_clean=0
         break
