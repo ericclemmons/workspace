@@ -32,7 +32,7 @@ for repo in "${repos[@]}"; do
 
   remote=$(cd "$task" && ensure_workspace_remote "$repo")
   info "pushing $repo ($branch) from $prefix"
-  git -C "$task" subtree push --prefix "$prefix" "$remote" "$branch"
+  git -C "$task" subtree -q push --prefix "$prefix" "$remote" "$branch"
 
   pushed=$((pushed + 1))
   ok "pushed $repo"

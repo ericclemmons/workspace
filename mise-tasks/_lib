@@ -17,7 +17,14 @@ die()  { echo "${C_RED}✗${C_RESET} $*" >&2; exit 1; }
 TASK_DIR=$(cd "${MISE_TASK_DIR:-$(dirname "${BASH_SOURCE[0]}")}" && pwd -P)
 
 workspace_root() {
-  dirname "$TASK_DIR"
+  case "$TASK_DIR" in
+    */.worktrees/*/mise-tasks)
+      echo "${TASK_DIR%%/.worktrees/*}"
+      ;;
+    *)
+      dirname "$TASK_DIR"
+      ;;
+  esac
 }
 
 require_workspace_root() {
@@ -155,6 +162,6 @@ ensure_subtree_on_current_branch() {
   fi
 
   info "adding subtree $repo at $prefix from $default"
-  git fetch "$remote" "$default"
-  git subtree add --prefix "$prefix" "$remote/$default"
+  git fetch -q "$remote" "$default"
+  git subtree -q add --prefix "$prefix" "$remote/$default"
 }

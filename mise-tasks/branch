@@ -41,7 +41,7 @@ for repo in "${repos[@]}"; do
   validate_name "repo" "$repo"
   remote=$(ensure_workspace_remote "$repo")
   default=$(repo_default_branch "$repo")
-  git fetch --prune "$remote" "$default"
+  git fetch -q --prune "$remote" "$default"
   ( cd "$task" && ensure_subtree_on_current_branch "$repo" )
 done
 

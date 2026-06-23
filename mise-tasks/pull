@@ -9,7 +9,7 @@ workspace_clean "$root" || die "workspace has uncommitted changes — commit or 
 
 if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
   info "pulling workspace"
-  git pull --ff-only
+  git pull -q --ff-only
 else
   warn "skipping workspace config pull — current branch has no upstream"
 fi
@@ -34,7 +34,7 @@ fetch_repo() {
   remote=$(ensure_workspace_remote "$repo")
   default=$(repo_default_branch "$repo")
   info "fetching $repo ($default)"
-  git fetch --prune "$remote" "$default"
+  git fetch -q --prune "$remote" "$default"
   ok "fetched $repo"
 }
 
@@ -58,7 +58,7 @@ cleanup_merged_tasks() {
       if git -C "$task" ls-remote --heads "$remote" "$branch" | grep -q .; then
         found_branch=1
         default=$(repo_default_branch "$repo")
-        git -C "$task" fetch "$remote" "$default" "$branch"
+        git -C "$task" fetch -q "$remote" "$default" "$branch"
         git -C "$task" merge-base --is-ancestor "$remote/$branch" "$remote/$default" || { can_clean=0; break; }
       elif ! git -C "$task" diff --quiet main..HEAD -- "$prefix"; then
         can_clean=0
@@ -109,8 +109,8 @@ for repo in "${repos[@]}"; do
   remote=$(ensure_workspace_remote "$repo")
   if [[ -e "$prefix" ]]; then
     info "pulling subtree $repo into $prefix ($default)"
-    git fetch "$remote" "$default"
-    git subtree pull --prefix "$prefix" "$remote" "$default"
+    git fetch -q "$remote" "$default"
+    git subtree -q pull --prefix "$prefix" "$remote" "$default"
   else
     ensure_subtree_on_current_branch "$repo"
   fi

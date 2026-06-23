@@ -249,10 +249,10 @@ test_mise_tasks() {
   assert_exit_code 0 $rc "status works from workspace root"
 
   cd .worktrees/jira-123
-  out=$(bash "$meta/mise-tasks/status" 2>&1); rc=$?
+  out=$(bash mise-tasks/status 2>&1); rc=$?
   assert_exit_code 0 $rc "status works from task root"
 
-  out=$(bash "$meta/mise-tasks/diff" 2>&1); rc=$?
+  out=$(bash mise-tasks/diff 2>&1); rc=$?
   assert_exit_code 0 $rc "diff works from task root"
 
   cd "$meta"
@@ -282,7 +282,7 @@ test_end_to_end() {
   git commit -q -m "test change"
 
   cd "$meta/.worktrees/e2e"
-  out=$(bash "$meta/mise-tasks/push" 2>&1); rc=$?
+  out=$(bash mise-tasks/push 2>&1); rc=$?
   assert_exit_code 0 $rc "push pushes changed repo branch"
   assert_contains "pushed fakerepo" "$out" "push reports repo"
   git -C "$upstream" show-ref --verify --quiet refs/heads/e2e && pass "upstream received branch e2e" || fail "upstream received branch e2e"
@@ -329,7 +329,7 @@ test_cross_repo_subtree_push() {
   git add apps/dashboard services/api packages/ui
   git commit -q -m "wire me"
 
-  out=$(bash "$meta/mise-tasks/push" 2>&1); rc=$?
+  out=$(bash mise-tasks/push 2>&1); rc=$?
   assert_exit_code 0 $rc "push subtree-pushes cross-repo workspace commit"
   assert_contains "pushed 3 repo" "$out" "push reports three repos"
 
