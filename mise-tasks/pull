@@ -45,6 +45,10 @@ cleanup_merged_tasks() {
   for task in "$root"/.worktrees/*; do
     [[ -d "$task" ]] || continue
     [[ -d "$task/.git" || -f "$task/.git" ]] || continue
+    if ! git -C "$task" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      warn "skipping broken workspace worktree $(basename "$task")"
+      continue
+    fi
     workspace_clean "$task" || continue
     branch=$(basename "$task")
 

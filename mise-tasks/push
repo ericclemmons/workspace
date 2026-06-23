@@ -28,11 +28,21 @@ push_subtree() {
 
 push_sync() {
   local task=$1 repo=$2 prefix=$3 remote=$4 branch=$5
-  local tmp url default subject body head subjects existing_branch
+  local tmp url default subject body head subjects existing_branch base base_tree default_tree
 
   command -v rsync >/dev/null 2>&1 || die "rsync is required for sync push mode"
 
   url=$(git -C "$task" remote get-url "$remote")
+  default=$(repo_default_branch "$repo")
+
+  git -C "$task" fetch -q "$remote" "$default"
+  base=$(git -C "$task" merge-base main HEAD)
+  base_tree=$(git -C "$task" rev-parse -q --verify "$base:$prefix" 2>/dev/null || true)
+  default_tree=$(git -C "$task" rev-parse "$remote/$default^{tree}")
+  if [[ -n "$base_tree" && "$base_tree" != "$default_tree" ]]; then
+    die "$repo prefix is based on a stale snapshot; run 'mise run pull $repo' and recreate or rebase .worktrees/$branch before pushing"
+  fi
+
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/workspace-push-$repo.XXXXXX")
   trap 'rm -rf "$tmp"' RETURN
 
@@ -45,7 +55,6 @@ push_sync() {
     info "updating existing $repo branch $branch"
     git -C "$tmp" fetch -q --depth=1 origin "$branch"
   else
-    default=$(repo_default_branch "$repo")
     info "creating $repo branch $branch from $default"
     git -C "$tmp" fetch -q --depth=1 origin "$default"
   fi
