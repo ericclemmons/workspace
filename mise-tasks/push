@@ -19,6 +19,63 @@ fi
 [[ ${#repos[@]} -gt 0 ]] || die "no repo prefixes found in .worktrees/$branch"
 
 pushed=0
+push_mode=${MISE_PUSH_MODE:-sync}
+
+push_subtree() {
+  local task=$1 prefix=$2 remote=$3 branch=$4
+  git -C "$task" subtree push --prefix "$prefix" "$remote" "$branch"
+}
+
+push_sync() {
+  local task=$1 repo=$2 prefix=$3 remote=$4 branch=$5
+  local tmp url default subject body head subjects existing_branch
+
+  command -v rsync >/dev/null 2>&1 || die "rsync is required for sync push mode"
+
+  url=$(git -C "$task" remote get-url "$remote")
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/workspace-push-$repo.XXXXXX")
+  trap 'rm -rf "$tmp"' RETURN
+
+  git -C "$tmp" init -q
+  git -C "$tmp" remote add origin "$url"
+
+  existing_branch=0
+  if git -C "$tmp" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+    existing_branch=1
+    info "updating existing $repo branch $branch"
+    git -C "$tmp" fetch -q --depth=1 origin "$branch"
+  else
+    default=$(repo_default_branch "$repo")
+    info "creating $repo branch $branch from $default"
+    git -C "$tmp" fetch -q --depth=1 origin "$default"
+  fi
+  git -C "$tmp" switch -q -c "$branch" FETCH_HEAD
+
+  rsync -a --delete --exclude='.git' "$task/$prefix/" "$tmp/"
+  git -C "$tmp" add -A
+
+  if git -C "$tmp" diff --cached --quiet; then
+    if [[ "$existing_branch" -eq 1 ]]; then
+      warn "$repo branch $branch already matches $prefix"
+    else
+      warn "$repo has no committable changes after syncing $prefix"
+    fi
+    return 1
+  fi
+
+  mapfile -t subjects < <(git -C "$task" log --reverse --format=%s main..HEAD -- "$prefix")
+  if [[ "${#subjects[@]}" -eq 1 ]]; then
+    subject=${subjects[0]}
+  else
+    subject="Apply workspace changes for $repo"
+  fi
+  head=$(git -C "$task" rev-parse --short HEAD)
+  body="Generated from workspace branch $branch at $head."
+
+  git -C "$tmp" commit -q -m "$subject" -m "$body"
+  git -C "$tmp" push -u origin "$branch"
+}
+
 for repo in "${repos[@]}"; do
   validate_name "repo" "$repo"
 
@@ -32,7 +89,20 @@ for repo in "${repos[@]}"; do
 
   remote=$(cd "$task" && ensure_workspace_remote "$repo")
   info "pushing $repo ($branch) from $prefix"
-  git -C "$task" subtree -q push --prefix "$prefix" "$remote" "$branch"
+
+  case "$push_mode" in
+    sync)
+      if ! push_sync "$task" "$repo" "$prefix" "$remote" "$branch"; then
+        continue
+      fi
+      ;;
+    subtree)
+      push_subtree "$task" "$prefix" "$remote" "$branch"
+      ;;
+    *)
+      die "unknown MISE_PUSH_MODE '$push_mode' (expected sync or subtree)"
+      ;;
+  esac
 
   pushed=$((pushed + 1))
   ok "pushed $repo"

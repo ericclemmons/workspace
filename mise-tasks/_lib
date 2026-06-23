@@ -140,7 +140,7 @@ list_task_repos() {
 
 workspace_clean() {
   local dir=${1:-.}
-  git -C "$dir" diff --quiet && git -C "$dir" diff --cached --quiet
+  [[ -z "$(git -C "$dir" status --porcelain)" ]]
 }
 
 ensure_workspace_remote() {
