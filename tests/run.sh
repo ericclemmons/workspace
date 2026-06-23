@@ -38,7 +38,7 @@ section() { echo; echo "$1"; }
 fresh_meta() {
   local dir path base
   dir=$(mktemp -d -p "$SCRATCH" meta.XXXXXX)
-  for path in README.md AGENTS.md mise.toml hk.pkl .gitconfig .gitignore opencode.json \
+  for path in README.md AGENTS.md mise.toml hk.pkl .gitconfig .gitignore \
               .claude .githooks .opencode mise-tasks tests; do
     [[ -e "$TEMPLATE_ROOT/$path" ]] || continue
     base=$(basename "$path")
@@ -84,7 +84,7 @@ test_structural() {
   section "structural"
 
   for f in README.md AGENTS.md mise.toml hk.pkl .gitconfig .gitignore \
-           opencode.json .claude/settings.json \
+           .claude/settings.json \
            .githooks/pre-commit .githooks/agent-guard-edit.sh \
            .githooks/agent-guard-bash.sh .githooks/agent-guard-context.sh \
            mise-tasks/_lib mise-tasks/add mise-tasks/bootstrap \
@@ -95,8 +95,6 @@ test_structural() {
   done
 
   jq empty "$TEMPLATE_ROOT/.claude/settings.json" 2>/dev/null && pass ".claude/settings.json is valid JSON" || fail ".claude/settings.json is valid JSON"
-  jq empty "$TEMPLATE_ROOT/opencode.json" 2>/dev/null && pass "opencode.json is valid JSON" || fail "opencode.json is valid JSON"
-
   for sh in "$TEMPLATE_ROOT"/.githooks/* "$TEMPLATE_ROOT"/mise-tasks/* "$TEMPLATE_ROOT"/tests/*.sh; do
     [[ -f "$sh" ]] || continue
     bash -n "$sh" 2>/dev/null && pass "syntax: ${sh#$TEMPLATE_ROOT/}" || fail "syntax: ${sh#$TEMPLATE_ROOT/}"
@@ -125,7 +123,7 @@ test_bootstrap_task() {
   section "bootstrap task"
   local meta out rc
   meta=$(mktemp -d -p "$SCRATCH" bootstrap.XXXXXX)
-  for path in README.md AGENTS.md mise.toml hk.pkl .gitconfig .gitignore opencode.json \
+  for path in README.md AGENTS.md mise.toml hk.pkl .gitconfig .gitignore \
               .claude .githooks .opencode mise-tasks tests; do
     [[ -e "$TEMPLATE_ROOT/$path" ]] || continue
     cp -R "$TEMPLATE_ROOT/$path" "$meta/$(basename "$path")"
@@ -162,7 +160,7 @@ test_agent_edit_guard() {
   run_hook "$hook" "{\"tool_input\":{\"file_path\":\"$meta/README.md\"}}"
   assert_exit_code 2 "$HOOK_EXIT" "blocks edit outside task worktrees"
 
-  run_hook "$hook" "{\"tool_input\":{\"file_path\":\"$meta/opencode.json\"}}"
+  run_hook "$hook" "{\"tool_input\":{\"file_path\":\"$meta/mise.toml\"}}"
   assert_exit_code 2 "$HOOK_EXIT" "blocks edit to workspace config"
 
   run_hook "$hook" "{\"tool_input\":{\"path\":\"$meta/.worktrees/feat-x/fake/file.txt\"}}"

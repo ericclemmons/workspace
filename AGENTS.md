@@ -46,7 +46,7 @@ Use the repo name that should identify the upstream. The add task registers a `w
 mise run pull
 ```
 
-This fetches each registered `workspace-*` remote and pulls the corresponding subtree prefixes into local `main`.
+This fetches each registered `workspace-*` remote and updates the corresponding top-level prefixes as snapshots on local `main`.
 
 ### 2. Start A Task
 
@@ -70,7 +70,7 @@ This creates one Git worktree for the whole workspace. The worktree branch is `J
 mise run push
 ```
 
-Run this from `.worktrees/<task>`. It runs `git subtree split` for changed prefixes and pushes branch `<task>` to each repo's origin.
+Run this from `.worktrees/<task>`. It runs `git subtree push` for changed prefixes and pushes branch `<task>` to each repo's origin.
 
 Do not use raw `git push` from a task worktree.
 
@@ -87,7 +87,7 @@ This removes the clean workspace worktree for the task.
 - Top-level subtree folders are first-class source snapshots.
 - Repo task edits happen in `.worktrees/<task>/<prefix>/*`.
 - Task name and branch name are the same across repos.
-- The top-level workspace repo is local-only coordination state and should not be pushed.
+- The top-level workspace repo is coordination state. Committing root snapshot updates is normal; upstream source changes should happen in task worktrees.
 - Use `mise run pull` and `mise run push` for cross-repo Git operations.
 - `--no-verify`, `core.hooksPath` reconfiguration, and `git worktree remove --force` are blocked.
 
@@ -146,7 +146,7 @@ References: [`chat-banda` thread](https://chat.google.com/room/example)
 | Create a task workspace worktree | `mise run branch <task> [repo...]` |
 | Aggregate status | `mise run status [repo...]` |
 | Aggregate diff | `mise run diff [repo...]` |
-| Split and push task branches | `mise run push [repo...]` |
+| Push task branches | `mise run push [repo...]` |
 | Remove clean task worktrees | `mise run clean <task>` |
 
 Raw Git commit/status/diff is fine inside `.worktrees/<task>`. Prefer mise tasks for cross-repo pull/push operations.

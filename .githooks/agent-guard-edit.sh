@@ -34,7 +34,7 @@ fi
 
 # Protect meta-infrastructure even within worktrees
 case "$abs" in
-  "$meta_root"/.githooks/*|"$meta_root"/AGENTS.md|"$meta_root"/.claude/settings.json|"$meta_root"/opencode.json|"$meta_root"/mise.toml|"$meta_root"/hk.pkl|"$meta_root"/.gitconfig|"$meta_root"/mise-tasks/*|"$meta_root"/.gitignore)
+  "$meta_root"/.githooks/*|"$meta_root"/AGENTS.md|"$meta_root"/.claude/settings.json|"$meta_root"/mise.toml|"$meta_root"/hk.pkl|"$meta_root"/.gitconfig|"$meta_root"/mise-tasks/*|"$meta_root"/.gitignore)
     block "Edit blocked: $abs is meta-repo infrastructure. Modifying it changes the rules for all agents. Ask the user to confirm and edit it themselves."
     ;;
 esac

@@ -140,7 +140,7 @@ That consistency is the point of the workflow: treat a multi-repo feature as one
 - Commit task work from `.worktrees/<task>`.
 - Use `mise run pull` instead of root `git pull` for repo sync.
 - Use `mise run push` instead of root `git push` for repo PR branches.
-- The workspace root is local-only and should not be pushed.
+- The workspace root is coordination state. Committing root snapshot updates is normal; upstream source changes should happen in task worktrees.
 - `--no-verify`, `core.hooksPath` reconfiguration, and `git worktree remove --force` are blocked.
 
 ## Tests
