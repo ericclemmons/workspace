@@ -59,6 +59,14 @@ mise run branch wire-api-me
 cd .worktrees/wire-api-me
 ```
 
+If an upstream repo already has a branch with the same name, `branch` prepares that prefix from the matching remote branch. Otherwise it leaves the prefix at the workspace `main` snapshot. Pass repo names to limit which prefixes are checked/prepared:
+
+```bash
+mise run branch BANDA-1841-status-fix terraform-cfaccounts
+```
+
+The optional `[repo...]` arguments are a filter, not a sparse checkout. The workspace worktree still contains every prefix committed on workspace `main`; the filter controls which repos are fetched and checked for a same-named remote branch.
+
 Now edit across repo prefixes in one checkout:
 
 ```txt

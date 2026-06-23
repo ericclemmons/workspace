@@ -216,7 +216,7 @@ test_agent_context_guard() {
 
 test_mise_tasks() {
   section "mise tasks"
-  local meta upstream staging_upstream out rc
+  local meta upstream staging_upstream out rc seed
   meta=$(fresh_meta); cd "$meta"
   upstream=$(fake_upstream fake)
   staging_upstream=$(fake_upstream staging-repo staging)
@@ -236,9 +236,21 @@ test_mise_tasks() {
   out=$(bash mise-tasks/add fake "$upstream" 2>&1 || true)
   assert_contains "already exists" "$out" "add rejects duplicate"
 
+  seed=$(mktemp -d -p "$SCRATCH" fake.branch.XXXXXX)
+  git clone -q "$upstream" "$seed"
+  git -C "$seed" config user.email "u@u"
+  git -C "$seed" config user.name "Upstream"
+  git -C "$seed" switch -q -c jira-123
+  echo remote-branch >> "$seed/README.md"
+  git -C "$seed" add README.md
+  git -C "$seed" commit -q -m "remote branch change"
+  git -C "$seed" push -q origin jira-123
+
   out=$(bash mise-tasks/branch jira-123 2>&1); rc=$?
   assert_exit_code 0 $rc "branch creates task repo worktree"
   [[ -f "$meta/.worktrees/jira-123/fake/README.md" ]] && pass "branch created .worktrees/jira-123/fake prefix" || fail "branch created .worktrees/jira-123/fake prefix"
+  grep -q remote-branch "$meta/.worktrees/jira-123/fake/README.md" && pass "branch uses matching remote repo branch" || fail "branch uses matching remote repo branch"
+  assert_contains "fake: using workspace-fake/jira-123" "$out" "branch reports matching remote repo branch"
   [[ "$(git -C "$meta/.worktrees/jira-123" symbolic-ref --short HEAD)" == "jira-123" ]] && pass "branch name matches task" || fail "branch name matches task"
 
   out=$(bash mise-tasks/branch jira-123 2>&1); rc=$?

@@ -13,6 +13,31 @@ require_workspace_root
 root=$(workspace_root)
 task="$root/.worktrees/$branch"
 
+use_repo_ref() {
+  local repo=$1 ref=$2 prefix current_tree ref_tree old_head ref_sha short
+  prefix=$(repo_prefix "$repo")
+
+  current_tree=$(git -C "$task" rev-parse -q --verify "HEAD:$prefix" 2>/dev/null || true)
+  ref_tree=$(git -C "$task" rev-parse "$ref^{tree}")
+  if [[ "$current_tree" == "$ref_tree" ]]; then
+    return 0
+  fi
+
+  old_head=$(git -C "$task" rev-parse HEAD)
+  ref_sha=$(git -C "$task" rev-parse "$ref")
+  short=$(git -C "$task" rev-parse --short "$ref")
+
+  if [[ -n "$current_tree" ]]; then
+    git -C "$task" rm -qr -- "$prefix"
+  fi
+  git -C "$task" read-tree --prefix="$prefix/" -u "$ref"
+  git -C "$task" commit -q \
+    -m "Use $repo $short for $branch" \
+    -m "git-subtree-dir: $prefix
+git-subtree-mainline: $old_head
+git-subtree-split: $ref_sha"
+}
+
 repos=("$@")
 if [[ ${#repos[@]} -eq 0 ]]; then
   repos=()
@@ -29,13 +54,13 @@ else
   [[ ! -e "$task" ]] || die ".worktrees/$branch exists and is not a git worktree"
   mkdir -p "$root/.worktrees"
   if git show-ref --verify --quiet "refs/heads/$branch"; then
-    info "adding workspace worktree on existing branch $branch"
     git worktree add -q "$task" "$branch"
   else
-    info "adding workspace worktree on new branch $branch from main"
     git worktree add -q -b "$branch" "$task" main
   fi
 fi
+
+workspace_clean "$task" || die ".worktrees/$branch has uncommitted changes; commit or stash first"
 
 for repo in "${repos[@]}"; do
   validate_name "repo" "$repo"
@@ -43,6 +68,13 @@ for repo in "${repos[@]}"; do
   default=$(repo_default_branch "$repo")
   git fetch -q --prune "$remote" "$default"
   ( cd "$task" && ensure_subtree_on_current_branch "$repo" )
+  if git -C "$task" ls-remote --exit-code --heads "$remote" "$branch" >/dev/null 2>&1; then
+    git -C "$task" fetch -q "$remote" "$branch"
+    info "$repo: using $remote/$branch"
+    use_repo_ref "$repo" "$remote/$branch"
+  else
+    info "$repo: using $remote/$default"
+  fi
 done
 
 ok "ready: .worktrees/$branch"
