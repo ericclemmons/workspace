@@ -63,7 +63,10 @@ push_sync() {
     return 1
   fi
 
-  mapfile -t subjects < <(git -C "$task" log --reverse --format=%s main..HEAD -- "$prefix")
+  subjects=()
+  while IFS= read -r subject; do
+    subjects+=("$subject")
+  done < <(git -C "$task" log --reverse --format=%s main..HEAD -- "$prefix")
   if [[ "${#subjects[@]}" -eq 1 ]]; then
     subject=${subjects[0]}
   else
