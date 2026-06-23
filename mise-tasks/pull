@@ -108,9 +108,25 @@ for repo in "${repos[@]}"; do
   prefix=$(repo_prefix "$repo")
   remote=$(ensure_workspace_remote "$repo")
   if [[ -e "$prefix" ]]; then
-    info "pulling subtree $repo into $prefix ($default)"
+    info "updating subtree $repo in $prefix ($default)"
     git fetch -q "$remote" "$default"
-    git subtree -q pull --prefix "$prefix" "$remote" "$default"
+    current_tree=$(git rev-parse -q --verify "HEAD:$prefix" 2>/dev/null || true)
+    upstream_tree=$(git rev-parse "$remote/$default^{tree}")
+    if [[ "$current_tree" == "$upstream_tree" ]]; then
+      ok "$repo already up to date"
+      continue
+    fi
+
+    old_head=$(git rev-parse HEAD)
+    upstream_sha=$(git rev-parse "$remote/$default")
+    git rm -qr -- "$prefix"
+    git read-tree --prefix="$prefix/" -u "$remote/$default"
+    short=$(git rev-parse --short "$remote/$default")
+    git commit -q \
+      -m "Update $repo to $short" \
+      -m "git-subtree-dir: $prefix
+git-subtree-mainline: $old_head
+git-subtree-split: $upstream_sha"
   else
     ensure_subtree_on_current_branch "$repo"
   fi

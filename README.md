@@ -50,6 +50,8 @@ Sync local `main` with all default upstream branches:
 mise run pull
 ```
 
+`pull` treats top-level repo folders as snapshots of their upstream default branches. It updates each prefix to the exact upstream tree and commits a normal workspace snapshot commit like `Update api to abc1234`, while preserving subtree metadata for later `git subtree push` operations.
+
 Start a cohesive feature branch/worktree:
 
 ```bash

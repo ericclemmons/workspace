@@ -263,7 +263,7 @@ test_mise_tasks() {
 
 test_end_to_end() {
   section "end-to-end (local upstream)"
-  local meta upstream out rc seed
+  local meta upstream out rc seed ahead
   meta=$(fresh_meta); cd "$meta"
   upstream=$(fake_upstream fakerepo)
 
@@ -303,7 +303,23 @@ test_end_to_end() {
   out=$(bash mise-tasks/pull fakerepo 2>&1); rc=$?
   assert_exit_code 0 $rc "pull updates subtree"
   grep -q upstream "$meta/fakerepo/README.md" && pass "subtree received upstream commit" || fail "subtree received upstream commit"
+  git log -1 --format=%s | grep -q "^Update fakerepo to " && pass "pull creates snapshot update commit" || fail "pull creates snapshot update commit"
+  git log -1 --format=%B | grep -q "^git-subtree-split: " && pass "pull records subtree split metadata" || fail "pull records subtree split metadata"
   [[ ! -e "$meta/.worktrees/e2e/fakerepo" ]] && pass "pull removed merged repo worktree" || fail "pull removed merged repo worktree"
+
+  bash mise-tasks/branch after-pull >/dev/null
+  cd .worktrees/after-pull/fakerepo
+  git config user.email "t@t"
+  git config user.name "Task"
+  echo after-pull >> README.md
+  git add README.md
+  git commit -q -m "after pull change"
+  cd "$meta/.worktrees/after-pull"
+  out=$(bash mise-tasks/push 2>&1); rc=$?
+  assert_exit_code 0 $rc "push after snapshot pull succeeds"
+  git -C "$upstream" fetch -q . after-pull:after-pull
+  ahead=$(git -C "$upstream" rev-list --count main..after-pull)
+  [[ "$ahead" == "1" ]] && pass "push after pull is one commit ahead" || fail "push after pull is one commit ahead" "ahead: $ahead"
 }
 
 test_cross_repo_subtree_push() {
