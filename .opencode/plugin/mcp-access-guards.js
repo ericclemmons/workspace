@@ -143,7 +143,7 @@ export default async () => ({
 
     throw new Error(
       "Use MCP tools for this authenticated resource instead of WebFetch. " +
-        "Run `opencode mcp list`; if cf-portal auth is stale, run `opencode mcp auth cf-portal`, then reconnect via `/mcp` if needed."
+        "Run `opencode mcp list`; if cf-portal auth is stale, call the `cf_portal_refresh` tool to authenticate, disconnect, and reconnect it."
     )
   },
 })
