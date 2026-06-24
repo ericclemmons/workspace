@@ -85,7 +85,29 @@ push_sync() {
   body="Generated from workspace branch $branch at $head."
 
   git -C "$tmp" commit -q -m "$subject" -m "$body"
-  git -C "$tmp" push -u origin "$branch"
+  if git -C "$tmp" push -u origin "$branch"; then
+    return 0
+  fi
+
+  if [[ "$existing_branch" -eq 1 ]] || ! git -C "$tmp" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+    die "failed to push $repo branch $branch"
+  fi
+
+  warn "$repo branch $branch appeared during push; retrying update"
+  git -C "$tmp" reset -q --hard
+  git -C "$tmp" fetch -q --depth=1 origin "$branch"
+  git -C "$tmp" switch -q -C "$branch" FETCH_HEAD
+
+  rsync -a --delete --exclude='.git' "$task/$prefix/" "$tmp/"
+  git -C "$tmp" add -A
+
+  if git -C "$tmp" diff --cached --quiet; then
+    warn "$repo branch $branch already matches $prefix"
+    return 1
+  fi
+
+  git -C "$tmp" commit -q -m "$subject" -m "$body"
+  git -C "$tmp" push -u origin "$branch" || die "failed to push $repo branch $branch after retry"
 }
 
 for repo in "${repos[@]}"; do
