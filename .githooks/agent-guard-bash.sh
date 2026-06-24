@@ -3,11 +3,13 @@
 set -euo pipefail
 
 input=$(cat)
-cmd=$(echo "$input" | jq -r '.tool_input.command // empty')
-[[ -z "$cmd" ]] && exit 0
+[[ "$input" == *'"command"'* ]] || exit 0
+cmd=$input
 
 block() {
-  jq -nc --arg reason "$1" '{decision:"block", reason:$reason}' >&2
+  local reason=${1//\\/\\\\}
+  reason=${reason//"/\\"}
+  printf '{"decision":"block","reason":"%s"}\n' "$reason" >&2
   exit 2
 }
 
@@ -18,19 +20,19 @@ cwd=$(pwd -P)
 
 if [[ "$cwd" == "$meta_root"/.worktrees/* ]]; then
   if [[ -d "$cwd/.git" || -f "$cwd/.git" ]]; then
-    if echo "$cmd" | grep -qE '\bgit[[:space:]]+push\b'; then
+    if [[ "$cmd" == *"git push"* ]]; then
       block "Refusing raw git push from a workspace task worktree. Use 'mise run push' so repo prefixes are split and pushed to their own upstream repos."
     fi
   fi
 fi
 
 # Block disabling hooks
-if echo "$cmd" | grep -qE 'core\.hooksPath|--no-verify'; then
+if [[ "$cmd" == *"core.hooksPath"* || "$cmd" == *"--no-verify"* ]]; then
   block "Refusing to disable or reconfigure git hooks. These enforce the meta-repo workflow."
 fi
 
 # Block --force worktree remove
-if echo "$cmd" | grep -qE '\bgit[[:space:]]+worktree[[:space:]]+remove\b.*--force\b'; then
+if [[ "$cmd" == *"git worktree remove"* && "$cmd" == *"--force"* ]]; then
   block "Refusing 'git worktree remove --force'. If there are uncommitted changes, deal with them explicitly (commit, stash, or discard) then re-run without --force."
 fi
 
