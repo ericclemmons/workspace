@@ -122,7 +122,7 @@ prune_git_state() {
   while IFS= read -r repo; do
     remote=$(repo_remote "$repo")
     info "pruning $remote"
-    git -C "$root" remote prune "$remote"
+    git -C "$root" remote prune "$remote" >/dev/null
   done < <(list_repos)
   ok "pruned stale Git state"
 }
@@ -160,7 +160,7 @@ clean_merged_tasks() {
         fi
         can_clean=0
         break
-      elif ! git -C "$task" diff --quiet main..HEAD -- "$prefix"; then
+      elif ! git -c diff.renames=false -C "$task" diff --quiet main..HEAD -- "$prefix"; then
         if branch_closed_or_merged "$repo" "$branch"; then
           continue
         fi
@@ -170,7 +170,7 @@ clean_merged_tasks() {
     done < <(list_repos)
 
     if [[ $found_branch -eq 0 ]]; then
-      git -C "$task" diff --quiet main..HEAD || can_clean=0
+      git -c diff.renames=false -C "$task" diff --quiet main..HEAD || can_clean=0
     fi
 
     [[ $can_clean -eq 1 ]] || continue
