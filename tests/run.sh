@@ -312,10 +312,15 @@ test_end_to_end() {
   cd "$meta"
   out=$(bash mise-tasks/sync fakerepo 2>&1); rc=$?
   assert_exit_code 0 $rc "sync updates subtree"
+  assert_contains "updated fakerepo: " "$out" "sync reports updated repo summary"
   grep -q upstream "$meta/fakerepo/README.md" && pass "subtree received upstream commit" || fail "subtree received upstream commit"
   git log -1 --format=%s | grep -q "^Update fakerepo to " && pass "sync creates snapshot update commit" || fail "sync creates snapshot update commit"
   git log -1 --format=%B | grep -q "^git-subtree-split: " && pass "sync records subtree split metadata" || fail "sync records subtree split metadata"
   [[ ! -e "$meta/.worktrees/e2e/fakerepo" ]] && pass "sync removed merged repo worktree" || fail "sync removed merged repo worktree"
+
+  out=$(bash mise-tasks/pull fakerepo 2>&1); rc=$?
+  assert_exit_code 0 $rc "noop pull succeeds"
+  [[ -z "$out" ]] && pass "noop pull is quiet" || fail "noop pull is quiet" "output: $out"
 
   bash mise-tasks/branch after-pull >/dev/null
   cd .worktrees/after-pull/fakerepo

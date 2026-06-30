@@ -8,10 +8,7 @@ root=$(workspace_root)
 workspace_clean "$root" || die "workspace has uncommitted changes — commit or stash first"
 
 if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
-  info "pulling workspace"
   git pull -q --ff-only
-else
-  warn "skipping workspace config pull — current branch has no upstream"
 fi
 
 repos=("$@")
@@ -33,9 +30,30 @@ fetch_repo() {
   local repo=$1 remote default
   remote=$(ensure_workspace_remote "$repo")
   default=$(repo_default_branch "$repo")
-  info "fetching $repo ($default)"
   git fetch -q --prune "$remote" "$default"
-  ok "fetched $repo"
+}
+
+subtree_split_for_prefix() {
+  local prefix=$1
+  git log -1 --format=%B -- "$prefix" | awk '/^git-subtree-split: / { print $2; exit }'
+}
+
+update_summary() {
+  local repo=$1 default=$2 remote_ref=$3 old_split=$4 new_sha=$5
+  local old_short new_short count
+
+  new_short=$(git rev-parse --short "$new_sha")
+  if [[ -n "$old_split" ]] && git rev-parse -q --verify "$old_split^{commit}" >/dev/null 2>&1; then
+    old_short=$(git rev-parse --short "$old_split")
+    count=$(git rev-list --count "$old_split..$remote_ref" 2>/dev/null || true)
+    if [[ -n "$count" ]]; then
+      info "updated $repo: $old_short...$default ($count commits)"
+    else
+      info "updated $repo: $old_short...$default"
+    fi
+  else
+    info "updated $repo: $default@$new_short"
+  fi
 }
 
 pids=()
@@ -70,28 +88,25 @@ for repo in "${repos[@]}"; do
   prefix=$(repo_prefix "$repo")
   remote=$(ensure_workspace_remote "$repo")
   if [[ -e "$prefix" ]]; then
-    info "updating subtree $repo in $prefix ($default)"
-    git fetch -q "$remote" "$default"
     current_tree=$(git rev-parse -q --verify "HEAD:$prefix" 2>/dev/null || true)
     upstream_tree=$(git rev-parse "$remote/$default^{tree}")
     if [[ "$current_tree" == "$upstream_tree" ]]; then
-      ok "$repo already up to date"
       continue
     fi
 
+    old_split=$(subtree_split_for_prefix "$prefix")
     old_head=$(git rev-parse HEAD)
     upstream_sha=$(git rev-parse "$remote/$default")
     git rm -qr -- "$prefix"
     git read-tree --prefix="$prefix/" -u "$remote/$default"
     short=$(git rev-parse --short "$remote/$default")
-    git commit -q \
+    git -c diff.renames=false commit -q \
       -m "Update $repo to $short" \
       -m "git-subtree-dir: $prefix
 git-subtree-mainline: $old_head
 git-subtree-split: $upstream_sha"
+    update_summary "$repo" "$default" "$remote/$default" "$old_split" "$upstream_sha"
   else
     ensure_subtree_on_current_branch "$repo"
   fi
 done
-
-ok "done"

@@ -5,7 +5,7 @@ source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
 require_workspace_root
 root=$(workspace_root)
 
-clean_task() {
+remove_task_worktree() {
   local task_name_arg=$1 task
   validate_name "task" "$task_name_arg"
   task="$root/.worktrees/$task_name_arg"
@@ -15,7 +15,103 @@ clean_task() {
 
   info "removing .worktrees/$task_name_arg"
   git -C "$root" worktree remove "$task"
+
+  if git -C "$root" show-ref --verify --quiet "refs/heads/$task_name_arg"; then
+    info "deleting local branch $task_name_arg"
+    git -C "$root" branch -D "$task_name_arg" >/dev/null
+  fi
+
   ok "cleaned .worktrees/$task_name_arg"
+}
+
+remote_url_host() {
+  local url=$1 rest
+  case "$url" in
+    git@*:*)
+      rest=${url#git@}
+      echo "${rest%%:*}"
+      ;;
+    ssh://git@*/*)
+      rest=${url#ssh://git@}
+      echo "${rest%%/*}"
+      ;;
+    https://*/*)
+      rest=${url#https://}
+      echo "${rest%%/*}"
+      ;;
+    http://*/*)
+      rest=${url#http://}
+      echo "${rest%%/*}"
+      ;;
+  esac
+}
+
+remote_url_path() {
+  local url=$1 path
+  case "$url" in
+    git@*:*)
+      path=${url#git@*:}
+      ;;
+    ssh://git@*/*)
+      path=${url#ssh://git@*/}
+      ;;
+    https://*/*)
+      path=${url#https://*/}
+      ;;
+    http://*/*)
+      path=${url#http://*/}
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  echo "${path%.git}"
+}
+
+urlencode() {
+  jq -rn --arg v "$1" '$v|@uri'
+}
+
+gitlab_mr_closed_or_merged() {
+  local host=$1 project=$2 branch=$3 encoded_project encoded_branch response
+  command -v glab >/dev/null 2>&1 || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+
+  encoded_project=$(urlencode "$project")
+  encoded_branch=$(urlencode "$branch")
+  response=$(glab api --hostname "$host" "projects/$encoded_project/merge_requests?source_branch=$encoded_branch&state=all&per_page=100" 2>/dev/null) || return 1
+  jq -e '([.[].state] | (index("opened") | not) and any(. == "closed" or . == "merged"))' >/dev/null 2>&1 <<<"$response"
+}
+
+github_pr_closed_or_merged() {
+  local project=$1 branch=$2 response
+  command -v gh >/dev/null 2>&1 || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+
+  response=$(gh pr list --repo "$project" --head "$branch" --state all --json state --limit 100 2>/dev/null) || return 1
+  jq -e '([.[].state] | (index("OPEN") | not) and any(. == "CLOSED" or . == "MERGED"))' >/dev/null 2>&1 <<<"$response"
+}
+
+branch_closed_or_merged() {
+  local repo=$1 branch=$2 remote url host project
+  remote=$(repo_remote "$repo")
+  url=$(git -C "$root" remote get-url "$remote" 2>/dev/null || true)
+  [[ -n "$url" ]] || return 1
+
+  host=$(remote_url_host "$url") || return 1
+  project=$(remote_url_path "$url") || return 1
+
+  case "$host" in
+    gitlab.*|*.gitlab.*)
+      gitlab_mr_closed_or_merged "$host" "$project" "$branch"
+      ;;
+    github.com|*.github.com)
+      github_pr_closed_or_merged "$project" "$branch"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 prune_git_state() {
@@ -56,8 +152,18 @@ clean_merged_tasks() {
         found_branch=1
         default=$(repo_default_branch "$repo")
         git -C "$task" fetch -q "$remote" "$default" "$branch"
-        git -C "$task" merge-base --is-ancestor "$remote/$branch" "$remote/$default" || { can_clean=0; break; }
+        if git -C "$task" merge-base --is-ancestor "$remote/$branch" "$remote/$default"; then
+          continue
+        fi
+        if branch_closed_or_merged "$repo" "$branch"; then
+          continue
+        fi
+        can_clean=0
+        break
       elif ! git -C "$task" diff --quiet main..HEAD -- "$prefix"; then
+        if branch_closed_or_merged "$repo" "$branch"; then
+          continue
+        fi
         can_clean=0
         break
       fi
@@ -68,8 +174,7 @@ clean_merged_tasks() {
     fi
 
     [[ $can_clean -eq 1 ]] || continue
-    info "removing merged workspace worktree $branch"
-    git -C "$root" worktree remove "$task"
+    remove_task_worktree "$branch"
   done
 }
 
@@ -93,6 +198,6 @@ case "${1:-}" in
     ;;
   *)
     [[ $# -eq 1 ]] || die "usage: mise run clean [task|--merged|--prune]"
-    clean_task "$1"
+    remove_task_worktree "$1"
     ;;
 esac

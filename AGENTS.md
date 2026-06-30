@@ -46,7 +46,7 @@ Use the repo name that should identify the upstream. The add task registers a `w
 mise run sync
 ```
 
-This fetches each registered `workspace-*` remote, updates the corresponding top-level prefixes as snapshots on local `main`, prunes stale Git state, and removes clean task worktrees whose repo branches have merged.
+This fetches each registered `workspace-*` remote, updates the corresponding top-level prefixes as snapshots on local `main`, prunes stale Git state, and removes clean task worktrees whose repo branches have merged or whose MR/PR is closed or merged.
 
 Use `mise run pull [repo...]` when you only need to refresh snapshots. Use `mise run clean` when you only need cleanup.
 
@@ -82,7 +82,7 @@ Do not use raw `git push` from a task worktree.
 mise run clean JIRA-123
 ```
 
-This removes the clean workspace worktree for the task. Running `mise run clean` with no task prunes stale Git state and removes clean task worktrees whose repo branches have merged.
+This removes the clean workspace worktree for the task. Running `mise run clean` with no task prunes stale Git state and removes clean task worktrees whose repo branches have merged or whose MR/PR is closed or merged.
 
 ## Rules
 
