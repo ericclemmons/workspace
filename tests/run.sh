@@ -95,6 +95,8 @@ test_structural() {
   done
 
   jq empty "$TEMPLATE_ROOT/.claude/settings.json" 2>/dev/null && pass ".claude/settings.json is valid JSON" || fail ".claude/settings.json is valid JSON"
+  git config --file "$TEMPLATE_ROOT/.gitconfig" --get core.untrackedCache | grep -q '^true$' && pass ".gitconfig enables untracked cache" || fail ".gitconfig enables untracked cache"
+  git config --file "$TEMPLATE_ROOT/.gitconfig" --get core.fsmonitor | grep -q '^true$' && pass ".gitconfig enables fsmonitor" || fail ".gitconfig enables fsmonitor"
   for sh in "$TEMPLATE_ROOT"/.githooks/* "$TEMPLATE_ROOT"/mise-tasks/* "$TEMPLATE_ROOT"/tests/*.sh; do
     [[ -f "$sh" ]] || continue
     bash -n "$sh" 2>/dev/null && pass "syntax: ${sh#$TEMPLATE_ROOT/}" || fail "syntax: ${sh#$TEMPLATE_ROOT/}"

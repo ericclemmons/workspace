@@ -1,3 +1,7 @@
+[core]
+	untrackedCache = true
+	fsmonitor = true
+
 [fetch]
 	prune = true
 
