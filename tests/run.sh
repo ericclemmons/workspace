@@ -90,7 +90,7 @@ test_structural() {
            mise-tasks/_lib mise-tasks/add mise-tasks/bootstrap \
            mise-tasks/branch mise-tasks/clean \
            mise-tasks/diff mise-tasks/list mise-tasks/pull mise-tasks/push \
-           mise-tasks/status mise-tasks/test tests/run.sh; do
+           mise-tasks/status mise-tasks/sync mise-tasks/test tests/run.sh; do
     [[ -f "$TEMPLATE_ROOT/$f" ]] && pass "exists: $f" || fail "exists: $f"
   done
 
@@ -310,12 +310,12 @@ test_end_to_end() {
   git -C "$seed" push -q origin main
 
   cd "$meta"
-  out=$(bash mise-tasks/pull fakerepo 2>&1); rc=$?
-  assert_exit_code 0 $rc "pull updates subtree"
+  out=$(bash mise-tasks/sync fakerepo 2>&1); rc=$?
+  assert_exit_code 0 $rc "sync updates subtree"
   grep -q upstream "$meta/fakerepo/README.md" && pass "subtree received upstream commit" || fail "subtree received upstream commit"
-  git log -1 --format=%s | grep -q "^Update fakerepo to " && pass "pull creates snapshot update commit" || fail "pull creates snapshot update commit"
-  git log -1 --format=%B | grep -q "^git-subtree-split: " && pass "pull records subtree split metadata" || fail "pull records subtree split metadata"
-  [[ ! -e "$meta/.worktrees/e2e/fakerepo" ]] && pass "pull removed merged repo worktree" || fail "pull removed merged repo worktree"
+  git log -1 --format=%s | grep -q "^Update fakerepo to " && pass "sync creates snapshot update commit" || fail "sync creates snapshot update commit"
+  git log -1 --format=%B | grep -q "^git-subtree-split: " && pass "sync records subtree split metadata" || fail "sync records subtree split metadata"
+  [[ ! -e "$meta/.worktrees/e2e/fakerepo" ]] && pass "sync removed merged repo worktree" || fail "sync removed merged repo worktree"
 
   bash mise-tasks/branch after-pull >/dev/null
   cd .worktrees/after-pull/fakerepo

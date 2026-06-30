@@ -38,48 +38,6 @@ fetch_repo() {
   ok "fetched $repo"
 }
 
-cleanup_merged_tasks() {
-  local task branch repo default prefix remote found_branch can_clean
-  [[ -d "$root/.worktrees" ]] || return 0
-
-  for task in "$root"/.worktrees/*; do
-    [[ -d "$task" ]] || continue
-    [[ -d "$task/.git" || -f "$task/.git" ]] || continue
-    if ! git -C "$task" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-      warn "skipping broken workspace worktree $(basename "$task")"
-      continue
-    fi
-    workspace_clean "$task" || continue
-    branch=$(basename "$task")
-
-    found_branch=0
-    can_clean=1
-    while IFS= read -r repo; do
-      prefix=$(repo_prefix "$repo")
-      [[ -e "$task/$prefix" ]] || continue
-      remote=$(cd "$task" && ensure_workspace_remote "$repo")
-
-      if git -C "$task" ls-remote --heads "$remote" "$branch" | grep -q .; then
-        found_branch=1
-        default=$(repo_default_branch "$repo")
-        git -C "$task" fetch -q "$remote" "$default" "$branch"
-        git -C "$task" merge-base --is-ancestor "$remote/$branch" "$remote/$default" || { can_clean=0; break; }
-      elif ! git -C "$task" diff --quiet main..HEAD -- "$prefix"; then
-        can_clean=0
-        break
-      fi
-    done < <(list_repos)
-
-    if [[ $found_branch -eq 0 ]]; then
-      git -C "$task" diff --quiet main..HEAD || can_clean=0
-    fi
-
-    [[ $can_clean -eq 1 ]] || continue
-    info "removing merged workspace worktree $branch"
-    git -C "$root" worktree remove "$task"
-  done
-}
-
 pids=()
 outputs=()
 for repo in "${repos[@]}"; do
@@ -135,7 +93,5 @@ git-subtree-split: $upstream_sha"
     ensure_subtree_on_current_branch "$repo"
   fi
 done
-
-cleanup_merged_tasks
 
 ok "done"

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#MISE description="Pull workspace snapshots and clean stale task worktrees. Usage: sync [repo...]"
+set -euo pipefail
+
+TASK_DIR=$(cd "${MISE_TASK_DIR:-$(dirname "$0")}" && pwd -P)
+
+bash "$TASK_DIR/pull" "$@"
+bash "$TASK_DIR/clean"

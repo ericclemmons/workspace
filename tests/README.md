@@ -19,6 +19,6 @@ Exits 0 on success, non-zero on any failure.
 - **Agent bash guard:** blocks dangerous workspace-root Git commands, blocks `--no-verify`/`core.hooksPath`/`--force worktree remove`, and allows normal worktree commits.
 - **Agent context guard:** emits reminders from the workspace root.
 - **Mise tasks:** validation and subtree/worktree task behavior.
-- **End-to-end:** real `add → branch → edit → push → pull → clean` against a local fake upstream.
+- **End-to-end:** real `add → branch → edit → push → sync → clean` against a local fake upstream.
 
 Each test group spins up a fresh meta repo in `$TMPDIR`. Cleanup on exit.

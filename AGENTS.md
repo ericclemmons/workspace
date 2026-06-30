@@ -43,10 +43,12 @@ Use the repo name that should identify the upstream. The add task registers a `w
 ### 1. Sync
 
 ```bash
-mise run pull
+mise run sync
 ```
 
-This fetches each registered `workspace-*` remote and updates the corresponding top-level prefixes as snapshots on local `main`.
+This fetches each registered `workspace-*` remote, updates the corresponding top-level prefixes as snapshots on local `main`, prunes stale Git state, and removes clean task worktrees whose repo branches have merged.
+
+Use `mise run pull [repo...]` when you only need to refresh snapshots. Use `mise run clean` when you only need cleanup.
 
 ### 2. Start A Task
 
@@ -80,7 +82,7 @@ Do not use raw `git push` from a task worktree.
 mise run clean JIRA-123
 ```
 
-This removes the clean workspace worktree for the task.
+This removes the clean workspace worktree for the task. Running `mise run clean` with no task prunes stale Git state and removes clean task worktrees whose repo branches have merged.
 
 ## Rules
 
@@ -142,11 +144,12 @@ References: [`chat-banda` thread](https://chat.google.com/room/example)
 |---|---|
 | Register a repo remote and add its subtree | `mise run add <name> <url> [prefix]` |
 | List repos and tasks | `mise run list` |
-| Pull subtree defaults | `mise run pull [repo...]` |
+| Sync snapshots and cleanup | `mise run sync [repo...]` |
+| Pull subtree defaults only | `mise run pull [repo...]` |
 | Create a task workspace worktree | `mise run branch <task> [repo...]` |
 | Aggregate status | `mise run status [repo...]` |
 | Aggregate diff | `mise run diff [repo...]` |
 | Push task branches | `mise run push [repo...]` |
-| Remove clean task worktrees | `mise run clean <task>` |
+| Clean task worktrees and stale state | `mise run clean [task|--merged|--prune]` |
 
 Raw Git commit/status/diff is fine inside `.worktrees/<task>`. Prefer mise tasks for cross-repo pull/push operations.
