@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-#MISE description="Push changed repos from a task worktree. Usage: push [repo...]"
+#MISE description="Push changed repo prefixes from a task worktree. Usage: push [repo...]"
 source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
 
 require_task_root
 root=$(workspace_root)
 task=$(task_root)
 branch=$(task_name)
+current=$(git -C "$task" symbolic-ref --short HEAD 2>/dev/null || true)
+[[ "$current" == "$branch" ]] || die "workspace worktree is on branch '$current', expected '$branch'"
+workspace_clean "$task" || die ".worktrees/$branch has uncommitted changes; commit before push"
 
 repos=("$@")
 if [[ ${#repos[@]} -eq 0 ]]; then
@@ -13,36 +16,128 @@ if [[ ${#repos[@]} -eq 0 ]]; then
   while IFS= read -r repo; do repos+=("$repo"); done < <(list_task_repos)
 fi
 
-[[ ${#repos[@]} -gt 0 ]] || die "no repo worktrees found in worktrees/$branch"
+[[ ${#repos[@]} -gt 0 ]] || die "no repo prefixes found in .worktrees/$branch"
 
 pushed=0
+push_mode=${MISE_PUSH_MODE:-sync}
+
+push_subtree() {
+  local task=$1 prefix=$2 remote=$3 branch=$4
+  git -C "$task" subtree push --prefix "$prefix" "$remote" "$branch"
+}
+
+push_sync() {
+  local task=$1 repo=$2 prefix=$3 remote=$4 branch=$5
+  local tmp url default subject body head subjects existing_branch base base_tree default_tree
+
+  command -v rsync >/dev/null 2>&1 || die "rsync is required for sync push mode"
+
+  url=$(git -C "$task" remote get-url "$remote")
+  default=$(repo_default_branch "$repo")
+
+  git -C "$task" fetch -q "$remote" "$default"
+  base=$(git -C "$task" merge-base main HEAD)
+  base_tree=$(git -C "$task" rev-parse -q --verify "$base:$prefix" 2>/dev/null || true)
+  default_tree=$(git -C "$task" rev-parse "$remote/$default^{tree}")
+  if [[ -n "$base_tree" && "$base_tree" != "$default_tree" ]]; then
+    die "$repo prefix is based on a stale snapshot; run 'mise run pull $repo' and recreate or rebase .worktrees/$branch before pushing"
+  fi
+
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/workspace-push-$repo.XXXXXX")
+  trap 'rm -rf "$tmp"' RETURN
+
+  git -C "$tmp" init -q
+  git -C "$tmp" remote add origin "$url"
+
+  existing_branch=0
+  if git -C "$tmp" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+    existing_branch=1
+    info "updating existing $repo branch $branch"
+    git -C "$tmp" fetch -q --depth=1 origin "$branch"
+  else
+    info "creating $repo branch $branch from $default"
+    git -C "$tmp" fetch -q --depth=1 origin "$default"
+  fi
+  git -C "$tmp" switch -q -c "$branch" FETCH_HEAD
+
+  rsync -a --delete --exclude='.git' "$task/$prefix/" "$tmp/"
+  git -C "$tmp" add -A
+
+  if git -C "$tmp" diff --cached --quiet; then
+    if [[ "$existing_branch" -eq 1 ]]; then
+      warn "$repo branch $branch already matches $prefix"
+    else
+      warn "$repo has no committable changes after syncing $prefix"
+    fi
+    return 1
+  fi
+
+  subjects=()
+  while IFS= read -r subject; do
+    subjects+=("$subject")
+  done < <(git -C "$task" log --reverse --format=%s main..HEAD -- "$prefix")
+  if [[ "${#subjects[@]}" -eq 1 ]]; then
+    subject=${subjects[0]}
+  else
+    subject="Apply workspace changes for $repo"
+  fi
+  head=$(git -C "$task" rev-parse --short HEAD)
+  body="Generated from workspace branch $branch at $head."
+
+  git -C "$tmp" commit -q -m "$subject" -m "$body"
+  if git -C "$tmp" push -u origin "$branch"; then
+    return 0
+  fi
+
+  if [[ "$existing_branch" -eq 1 ]] || ! git -C "$tmp" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+    die "failed to push $repo branch $branch"
+  fi
+
+  warn "$repo branch $branch appeared during push; retrying update"
+  git -C "$tmp" reset -q --hard
+  git -C "$tmp" fetch -q --depth=1 origin "$branch"
+  git -C "$tmp" switch -q -C "$branch" FETCH_HEAD
+
+  rsync -a --delete --exclude='.git' "$task/$prefix/" "$tmp/"
+  git -C "$tmp" add -A
+
+  if git -C "$tmp" diff --cached --quiet; then
+    warn "$repo branch $branch already matches $prefix"
+    return 1
+  fi
+
+  git -C "$tmp" commit -q -m "$subject" -m "$body"
+  git -C "$tmp" push -u origin "$branch" || die "failed to push $repo branch $branch after retry"
+}
+
 for repo in "${repos[@]}"; do
   validate_name "repo" "$repo"
-  wt="$task/$repo"
-  [[ -d "$wt/.git" || -f "$wt/.git" ]] || die "worktrees/$branch/$repo is not a git repo"
-  current=$(git -C "$wt" symbolic-ref --short HEAD 2>/dev/null || true)
-  [[ "$current" == "$branch" ]] || die "$repo is on branch '$current', expected '$branch'"
-  repo_clean "$wt" || die "$repo has uncommitted changes; commit before push"
 
-  upstream=$(git -C "$wt" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)
-  if [[ -n "$upstream" && "${upstream#*/}" == "$branch" ]]; then
-    ahead=$(git -C "$wt" rev-list --count "$upstream..HEAD")
-    if [[ "$ahead" == "0" ]]; then
-      info "skipping $repo — no commits ahead of $upstream"
-      continue
-    fi
-    info "pushing $repo ($branch → $upstream)"
-    git -C "$wt" push
-  else
-    base="$root/repos/$repo"
-    default=$(repo_default_branch "$base")
-    if git -C "$wt" merge-base --is-ancestor HEAD "origin/$default" 2>/dev/null; then
-      info "skipping $repo — no commits ahead of origin/$default"
-      continue
-    fi
-    info "pushing $repo ($branch → origin/$branch)"
-    git -C "$wt" push -u origin "$branch"
+  prefix=$(repo_prefix "$repo")
+  [[ -e "$task/$prefix" ]] || die ".worktrees/$branch is missing prefix $prefix for $repo"
+
+  if git -C "$task" diff --quiet main..HEAD -- "$prefix"; then
+    info "skipping $repo — no changes under $prefix"
+    continue
   fi
+
+  remote=$(cd "$task" && ensure_workspace_remote "$repo")
+  info "pushing $repo ($branch) from $prefix"
+
+  case "$push_mode" in
+    sync)
+      if ! push_sync "$task" "$repo" "$prefix" "$remote" "$branch"; then
+        continue
+      fi
+      ;;
+    subtree)
+      push_subtree "$task" "$prefix" "$remote" "$branch"
+      ;;
+    *)
+      die "unknown MISE_PUSH_MODE '$push_mode' (expected sync or subtree)"
+      ;;
+  esac
+
   pushed=$((pushed + 1))
   ok "pushed $repo"
 done

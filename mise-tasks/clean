@@ -1,29 +1,203 @@
 #!/usr/bin/env bash
-#MISE description="Remove one task worktree after all repo worktrees are clean. Usage: clean <task>"
+#MISE description="Clean workspace task worktrees and stale Git state. Usage: clean [task|--merged|--prune]"
 source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
 
-task_name_arg=${1:-}
-[[ -z "$task_name_arg" ]] && die "usage: mise run clean <task>"
-validate_name "task" "$task_name_arg"
 require_workspace_root
-
 root=$(workspace_root)
-task="$root/worktrees/$task_name_arg"
-[[ -d "$task" ]] || die "worktrees/$task_name_arg does not exist"
 
-for repo in "$task"/*; do
-  [[ -d "$repo/.git" || -f "$repo/.git" ]] || continue
-  repo_clean "$repo" || die "$(basename "$repo") has uncommitted changes; commit or discard them first"
-done
+remove_task_worktree() {
+  local task_name_arg=$1 task
+  validate_name "task" "$task_name_arg"
+  task="$root/.worktrees/$task_name_arg"
+  [[ -d "$task" ]] || die ".worktrees/$task_name_arg does not exist"
+  [[ -d "$task/.git" || -f "$task/.git" ]] || die ".worktrees/$task_name_arg is not a workspace git worktree"
+  workspace_clean "$task" || die ".worktrees/$task_name_arg has uncommitted changes; commit or discard them first"
 
-for repo in "$task"/*; do
-  [[ -d "$repo/.git" || -f "$repo/.git" ]] || continue
-  name=$(basename "$repo")
-  base="$root/repos/$name"
-  [[ -d "$base/.git" || -f "$base/.git" ]] || die "repos/$name is missing"
-  info "removing worktrees/$task_name_arg/$name"
-  git -C "$base" worktree remove "$repo"
-done
+  info "removing .worktrees/$task_name_arg"
+  git -C "$root" worktree remove "$task"
 
-rmdir "$task" 2>/dev/null || warn "worktrees/$task_name_arg is not empty; left it in place"
-ok "cleaned worktrees/$task_name_arg"
+  if git -C "$root" show-ref --verify --quiet "refs/heads/$task_name_arg"; then
+    info "deleting local branch $task_name_arg"
+    git -C "$root" branch -D "$task_name_arg" >/dev/null
+  fi
+
+  ok "cleaned .worktrees/$task_name_arg"
+}
+
+remote_url_host() {
+  local url=$1 rest
+  case "$url" in
+    git@*:*)
+      rest=${url#git@}
+      echo "${rest%%:*}"
+      ;;
+    ssh://git@*/*)
+      rest=${url#ssh://git@}
+      echo "${rest%%/*}"
+      ;;
+    https://*/*)
+      rest=${url#https://}
+      echo "${rest%%/*}"
+      ;;
+    http://*/*)
+      rest=${url#http://}
+      echo "${rest%%/*}"
+      ;;
+  esac
+}
+
+remote_url_path() {
+  local url=$1 path
+  case "$url" in
+    git@*:*)
+      path=${url#git@*:}
+      ;;
+    ssh://git@*/*)
+      path=${url#ssh://git@*/}
+      ;;
+    https://*/*)
+      path=${url#https://*/}
+      ;;
+    http://*/*)
+      path=${url#http://*/}
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  echo "${path%.git}"
+}
+
+urlencode() {
+  jq -rn --arg v "$1" '$v|@uri'
+}
+
+gitlab_mr_closed_or_merged() {
+  local host=$1 project=$2 branch=$3 encoded_project encoded_branch response
+  command -v glab >/dev/null 2>&1 || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+
+  encoded_project=$(urlencode "$project")
+  encoded_branch=$(urlencode "$branch")
+  response=$(glab api --hostname "$host" "projects/$encoded_project/merge_requests?source_branch=$encoded_branch&state=all&per_page=100" 2>/dev/null) || return 1
+  jq -e '([.[].state] | (index("opened") | not) and any(. == "closed" or . == "merged"))' >/dev/null 2>&1 <<<"$response"
+}
+
+github_pr_closed_or_merged() {
+  local project=$1 branch=$2 response
+  command -v gh >/dev/null 2>&1 || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+
+  response=$(gh pr list --repo "$project" --head "$branch" --state all --json state --limit 100 2>/dev/null) || return 1
+  jq -e '([.[].state] | (index("OPEN") | not) and any(. == "CLOSED" or . == "MERGED"))' >/dev/null 2>&1 <<<"$response"
+}
+
+branch_closed_or_merged() {
+  local repo=$1 branch=$2 remote url host project
+  remote=$(repo_remote "$repo")
+  url=$(git -C "$root" remote get-url "$remote" 2>/dev/null || true)
+  [[ -n "$url" ]] || return 1
+
+  host=$(remote_url_host "$url") || return 1
+  project=$(remote_url_path "$url") || return 1
+
+  case "$host" in
+    gitlab.*|*.gitlab.*)
+      gitlab_mr_closed_or_merged "$host" "$project" "$branch"
+      ;;
+    github.com|*.github.com)
+      github_pr_closed_or_merged "$project" "$branch"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+prune_git_state() {
+  local repo remote
+  info "pruning Git worktree metadata"
+  git -C "$root" worktree prune
+
+  while IFS= read -r repo; do
+    remote=$(repo_remote "$repo")
+    info "pruning $remote"
+    git -C "$root" remote prune "$remote" >/dev/null
+  done < <(list_repos)
+  ok "pruned stale Git state"
+}
+
+clean_merged_tasks() {
+  local task branch repo default prefix remote found_branch can_clean
+  [[ -d "$root/.worktrees" ]] || return 0
+
+  for task in "$root"/.worktrees/*; do
+    [[ -d "$task" ]] || continue
+    [[ -d "$task/.git" || -f "$task/.git" ]] || continue
+    if ! git -C "$task" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      warn "skipping broken workspace worktree $(basename "$task")"
+      continue
+    fi
+    workspace_clean "$task" || continue
+    branch=$(basename "$task")
+
+    found_branch=0
+    can_clean=1
+    while IFS= read -r repo; do
+      prefix=$(repo_prefix "$repo")
+      [[ -e "$task/$prefix" ]] || continue
+      remote=$(cd "$task" && ensure_workspace_remote "$repo")
+
+      if git -C "$task" ls-remote --heads "$remote" "$branch" | grep -q .; then
+        found_branch=1
+        default=$(repo_default_branch "$repo")
+        git -C "$task" fetch -q "$remote" "$default" "$branch"
+        if git -C "$task" merge-base --is-ancestor "$remote/$branch" "$remote/$default"; then
+          continue
+        fi
+        if branch_closed_or_merged "$repo" "$branch"; then
+          continue
+        fi
+        can_clean=0
+        break
+      elif ! git -c diff.renames=false -C "$task" diff --quiet main..HEAD -- "$prefix"; then
+        if branch_closed_or_merged "$repo" "$branch"; then
+          continue
+        fi
+        can_clean=0
+        break
+      fi
+    done < <(list_repos)
+
+    if [[ $found_branch -eq 0 ]]; then
+      git -c diff.renames=false -C "$task" diff --quiet main..HEAD || can_clean=0
+    fi
+
+    [[ $can_clean -eq 1 ]] || continue
+    remove_task_worktree "$branch"
+  done
+}
+
+case "${1:-}" in
+  "")
+    prune_git_state
+    clean_merged_tasks
+    ok "done"
+    ;;
+  --merged)
+    [[ $# -eq 1 ]] || die "usage: mise run clean [task|--merged|--prune]"
+    clean_merged_tasks
+    ok "done"
+    ;;
+  --prune)
+    [[ $# -eq 1 ]] || die "usage: mise run clean [task|--merged|--prune]"
+    prune_git_state
+    ;;
+  --*)
+    die "usage: mise run clean [task|--merged|--prune]"
+    ;;
+  *)
+    [[ $# -eq 1 ]] || die "usage: mise run clean [task|--merged|--prune]"
+    remove_task_worktree "$1"
+    ;;
+esac

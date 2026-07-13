@@ -9,7 +9,7 @@ else
   C_GREEN=""; C_RED=""; C_YELLOW=""; C_BLUE=""; C_DIM=""; C_BOLD=""; C_RESET=""
 fi
 
-info() { echo "${C_BLUE}→${C_RESET} $*"; }
+info() { echo "${C_BLUE}->${C_RESET} $*"; }
 ok()   { echo "${C_GREEN}✓${C_RESET} $*"; }
 warn() { echo "${C_YELLOW}!${C_RESET} $*" >&2; }
 die()  { echo "${C_RED}✗${C_RESET} $*" >&2; exit 1; }
@@ -17,7 +17,14 @@ die()  { echo "${C_RED}✗${C_RESET} $*" >&2; exit 1; }
 TASK_DIR=$(cd "${MISE_TASK_DIR:-$(dirname "${BASH_SOURCE[0]}")}" && pwd -P)
 
 workspace_root() {
-  dirname "$TASK_DIR"
+  case "$TASK_DIR" in
+    */.worktrees/*/mise-tasks)
+      echo "${TASK_DIR%%/.worktrees/*}"
+      ;;
+    *)
+      dirname "$TASK_DIR"
+      ;;
+  esac
 }
 
 require_workspace_root() {
@@ -34,28 +41,63 @@ validate_name() {
   [[ "$name" != "." && "$name" != ".." ]] || die "invalid $kind name: '$name'"
 }
 
+repo_remote() {
+  local repo=$1
+  echo "workspace-$repo"
+}
+
 list_repos() {
-  local root name
-  root=$(workspace_root)
-  [[ -d "$root/repos" ]] || return 0
-  for path in "$root"/repos/*; do
-    [[ -d "$path/.git" || -f "$path/.git" ]] || continue
-    name=$(basename "$path")
-    printf '%s\n' "$name"
+  local remote
+  git remote 2>/dev/null | while IFS= read -r remote; do
+    [[ "$remote" == workspace-* ]] || continue
+    printf '%s\n' "${remote#workspace-}"
   done | sort
 }
 
+repo_prefix() {
+  local repo=$1 remote configured
+  remote=$(repo_remote "$repo")
+  configured=$(git config --get "remote.$remote.workspacePrefix" 2>/dev/null || true)
+  if [[ -n "$configured" ]]; then
+    echo "$configured"
+  else
+    echo "$repo"
+  fi
+}
+
+repo_origin_url() {
+  local repo=$1 remote
+  remote=$(repo_remote "$repo")
+  git remote get-url "$remote"
+}
+
+remote_default_branch() {
+  local url=$1 kind ref head
+  while read -r kind ref head; do
+    if [[ "$kind" == "ref:" && "$head" == "HEAD" ]]; then
+      echo "${ref#refs/heads/}"
+      return 0
+    fi
+  done < <(git ls-remote --symref "$url" HEAD 2>/dev/null || true)
+  echo "main"
+}
+
 repo_default_branch() {
-  local repo=$1 configured ref
-  configured=$(git -C "$repo" config --get workspace.defaultBranch 2>/dev/null || true)
+  local repo=$1 remote configured url
+  remote=$(repo_remote "$repo")
+  configured=$(git config --get "remote.$remote.workspaceDefaultBranch" 2>/dev/null || true)
   [[ -n "$configured" ]] && { echo "$configured"; return 0; }
 
-  ref=$(git -C "$repo" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
-  if [[ -n "$ref" ]]; then
-    echo "${ref#origin/}"
+  url=$(repo_origin_url "$repo" 2>/dev/null || true)
+  if [[ -n "$url" ]]; then
+    remote_default_branch "$url"
   else
     echo "main"
   fi
+}
+
+workspace_branch() {
+  git symbolic-ref --short HEAD 2>/dev/null || echo "DETACHED"
 }
 
 task_root() {
@@ -63,10 +105,10 @@ task_root() {
   root=$(workspace_root)
   cwd=$(pwd -P)
   case "$cwd" in
-    "$root"/worktrees/*)
-      rel=${cwd#"$root"/worktrees/}
+    "$root"/.worktrees/*)
+      rel=${cwd#"$root"/.worktrees/}
       task=${rel%%/*}
-      echo "$root/worktrees/$task"
+      echo "$root/.worktrees/$task"
       ;;
     *) return 1 ;;
   esac
@@ -78,24 +120,48 @@ task_name() {
 
 require_task_root() {
   local root cwd task
-  task=$(task_root) || die "run this from inside worktrees/<task>"
+  task=$(task_root) || die "run this from inside .worktrees/<task>"
   cwd=$(pwd -P)
   [[ "$cwd" == "$task" ]] || die "run this from the task root: $task"
   root=$(workspace_root)
-  [[ "$task" == "$root"/worktrees/* ]] || die "not inside a workspace task"
+  [[ "$task" == "$root"/.worktrees/* ]] || die "not inside a workspace task"
+  [[ -d "$task/.git" || -f "$task/.git" ]] || die ".worktrees/$(basename "$task") is not a workspace git worktree"
 }
 
 list_task_repos() {
-  local task path name
+  local task repo prefix
   task=$(task_root) || return 0
-  for path in "$task"/*; do
-    [[ -d "$path/.git" || -f "$path/.git" ]] || continue
-    name=$(basename "$path")
-    printf '%s\n' "$name"
-  done | sort
+  while IFS= read -r repo; do
+    prefix=$(repo_prefix "$repo")
+    [[ -e "$task/$prefix" ]] || continue
+    printf '%s\n' "$repo"
+  done < <(list_repos) | sort
 }
 
-repo_clean() {
-  local repo=$1
-  git -C "$repo" diff --quiet && git -C "$repo" diff --cached --quiet
+workspace_clean() {
+  local dir=${1:-.}
+  [[ -z "$(git -C "$dir" status --porcelain)" ]]
+}
+
+ensure_workspace_remote() {
+  local repo=$1 remote url
+  remote=$(repo_remote "$repo")
+  url=$(git remote get-url "$remote" 2>/dev/null || true)
+  [[ -n "$url" ]] || die "repo '$repo' is not configured; add it with: mise run add $repo <url> [prefix]"
+  echo "$remote"
+}
+
+ensure_subtree_on_current_branch() {
+  local repo=$1 prefix default remote
+  prefix=$(repo_prefix "$repo")
+  default=$(repo_default_branch "$repo")
+  remote=$(ensure_workspace_remote "$repo")
+
+  if [[ -e "$prefix" ]]; then
+    return 0
+  fi
+
+  info "adding subtree $repo at $prefix from $default"
+  git fetch -q "$remote" "$default"
+  git subtree -q add --prefix "$prefix" "$remote/$default"
 }

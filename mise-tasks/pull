@@ -1,18 +1,14 @@
 #!/usr/bin/env bash
-#MISE description="Fast-forward workspace and base repos. Usage: pull [repo...]"
+#MISE description="Pull workspace config and default subtree prefixes. Usage: pull [repo...]"
 source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
 
 require_workspace_root
 root=$(workspace_root)
 
-git diff --quiet && git diff --cached --quiet \
-  || die "workspace has uncommitted changes — commit or stash first"
+workspace_clean "$root" || die "workspace has uncommitted changes — commit or stash first"
 
 if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
-  info "pulling workspace"
-  git pull --ff-only
-else
-  warn "skipping workspace pull — main has no upstream"
+  git pull -q --ff-only
 fi
 
 repos=("$@")
@@ -27,84 +23,45 @@ if [[ ${#repos[@]} -eq 0 ]]; then
   exit 0
 fi
 
-base_paths=()
-defaults=()
-for repo in "${repos[@]}"; do
-  validate_name "repo" "$repo"
-  base="$root/repos/$repo"
-  [[ -d "$base/.git" || -f "$base/.git" ]] || die "repos/$repo is not a git repo"
-  repo_clean "$base" || die "repos/$repo has uncommitted changes; base repos must stay clean"
-
-  default=$(repo_default_branch "$base")
-  base_paths+=("$base")
-  defaults+=("$default")
-done
-
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-pull_repo() {
-  local repo=$1 base=$2 default=$3
-  info "pulling $repo ($default)"
-  git -C "$base" fetch --prune origin
-  git -C "$base" switch -q "$default"
-  git -C "$base" pull --ff-only origin "$default"
-  ok "pulled $repo"
+fetch_repo() {
+  local repo=$1 remote default
+  remote=$(ensure_workspace_remote "$repo")
+  default=$(repo_default_branch "$repo")
+  git fetch -q --prune "$remote" "$default"
 }
 
-branch_was_pushed() {
-  local wt=$1 branch=$2
-  git -C "$wt" config --get "branch.$branch.remote" >/dev/null 2>&1 \
-    || git -C "$wt" show-ref --verify --quiet "refs/remotes/origin/$branch"
+subtree_split_for_prefix() {
+  local prefix=$1
+  git log -1 --format=%B -- "$prefix" | awk '/^git-subtree-split: / { print $2; exit }'
 }
 
-task_repo_merged() {
-  local wt=$1 base=$2 branch default target
-  repo_clean "$wt" || return 1
-  branch=$(git -C "$wt" symbolic-ref --short HEAD 2>/dev/null) || return 1
-  branch_was_pushed "$wt" "$branch" || return 1
-  default=$(repo_default_branch "$base")
-  target="refs/remotes/origin/$default"
-  git -C "$base" show-ref --verify --quiet "$target" || return 1
-  git -C "$wt" merge-base --is-ancestor HEAD "$target"
-}
+update_summary() {
+  local repo=$1 default=$2 remote_ref=$3 old_split=$4 new_sha=$5
+  local old_short new_short count
 
-cleanup_merged_tasks() {
-  local task repo name base found can_clean
-  [[ -d "$root/worktrees" ]] || return 0
-
-  for task in "$root"/worktrees/*; do
-    [[ -d "$task" ]] || continue
-    [[ -d "$task/.git" || -f "$task/.git" ]] && continue
-
-    found=0
-    can_clean=1
-    for repo in "$task"/*; do
-      [[ -d "$repo/.git" || -f "$repo/.git" ]] || continue
-      found=1
-      name=$(basename "$repo")
-      base="$root/repos/$name"
-      [[ -d "$base/.git" || -f "$base/.git" ]] || { can_clean=0; break; }
-      task_repo_merged "$repo" "$base" || { can_clean=0; break; }
-    done
-
-    [[ $found -eq 1 && $can_clean -eq 1 ]] || continue
-    for repo in "$task"/*; do
-      [[ -d "$repo/.git" || -f "$repo/.git" ]] || continue
-      name=$(basename "$repo")
-      info "removing merged worktree $(basename "$task")/$name"
-      git -C "$root/repos/$name" worktree remove "$repo"
-    done
-    rmdir "$task" 2>/dev/null || warn "worktrees/$(basename "$task") is not empty; left it in place"
-  done
+  new_short=$(git rev-parse --short "$new_sha")
+  if [[ -n "$old_split" ]] && git rev-parse -q --verify "$old_split^{commit}" >/dev/null 2>&1; then
+    old_short=$(git rev-parse --short "$old_split")
+    count=$(git rev-list --count "$old_split..$remote_ref" 2>/dev/null || true)
+    if [[ -n "$count" ]]; then
+      info "updated $repo: $old_short...$default ($count commits)"
+    else
+      info "updated $repo: $old_short...$default"
+    fi
+  else
+    info "updated $repo: $default@$new_short"
+  fi
 }
 
 pids=()
 outputs=()
-for i in "${!repos[@]}"; do
-  repo=${repos[$i]}
+for repo in "${repos[@]}"; do
+  validate_name "repo" "$repo"
   out="$tmp/$repo.out"
-  pull_repo "$repo" "${base_paths[$i]}" "${defaults[$i]}" >"$out" 2>&1 &
+  fetch_repo "$repo" >"$out" 2>&1 &
   pids+=("$!")
   outputs+=("$out")
 done
@@ -121,8 +78,35 @@ for i in "${!pids[@]}"; do
   fi
 done
 
-[[ $failed -eq 0 ]] || die "one or more repos failed to pull"
+current=$(workspace_branch)
+[[ "$current" == "main" ]] || die "pull subtree updates from main; current branch is $current"
 
-cleanup_merged_tasks
+[[ $failed -eq 0 ]] || die "one or more repos failed to fetch"
 
-ok "done"
+for repo in "${repos[@]}"; do
+  default=$(repo_default_branch "$repo")
+  prefix=$(repo_prefix "$repo")
+  remote=$(ensure_workspace_remote "$repo")
+  if [[ -e "$prefix" ]]; then
+    current_tree=$(git rev-parse -q --verify "HEAD:$prefix" 2>/dev/null || true)
+    upstream_tree=$(git rev-parse "$remote/$default^{tree}")
+    if [[ "$current_tree" == "$upstream_tree" ]]; then
+      continue
+    fi
+
+    old_split=$(subtree_split_for_prefix "$prefix")
+    old_head=$(git rev-parse HEAD)
+    upstream_sha=$(git rev-parse "$remote/$default")
+    git rm -qr -- "$prefix"
+    git read-tree --prefix="$prefix/" -u "$remote/$default"
+    short=$(git rev-parse --short "$remote/$default")
+    git -c diff.renames=false commit -q \
+      -m "Update $repo to $short" \
+      -m "git-subtree-dir: $prefix
+git-subtree-mainline: $old_head
+git-subtree-split: $upstream_sha"
+    update_summary "$repo" "$default" "$remote/$default" "$old_split" "$upstream_sha"
+  else
+    ensure_subtree_on_current_branch "$repo"
+  fi
+done

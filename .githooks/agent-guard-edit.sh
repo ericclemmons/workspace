@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PreToolUse hook for Edit/Write/MultiEdit/NotebookEdit.
-# Blocks edits outside worktrees or to meta-infrastructure files.
+# Blocks edits outside task worktrees or to meta-infrastructure files.
 set -euo pipefail
 
 input=$(cat)
@@ -25,24 +25,16 @@ abs=$(readlink -f "$abs" 2>/dev/null \
 # Workspace root is based on this guard's location so nested repos cannot hide it.
 meta_root=$(cd "$(dirname "$0")/.." && pwd -P)
 
-# Edits must be inside a repo worktree, not the base repos cache.
-if [[ "$abs" == "$meta_root/repos/"* ]]; then
-  block "Edit blocked: $abs is inside ./repos/. Base repos are read-only caches. Create a task worktree first:
+if [[ "$abs" != "$meta_root/.worktrees/"*/* ]]; then
+  block "Edit blocked: $abs is outside ./.worktrees/<task>/<repo>/. Create a task worktree first:
   mise run branch <name>
-  cd worktrees/<name>
-then make edits there."
-fi
-
-if [[ "$abs" != "$meta_root/worktrees/"*/* ]]; then
-  block "Edit blocked: $abs is outside ./worktrees/<task>/<repo>/. Create a task worktree first:
-  mise run branch <name>
-  cd worktrees/<name>
+  cd .worktrees/<name>
 then make edits there."
 fi
 
 # Protect meta-infrastructure even within worktrees
 case "$abs" in
-  "$meta_root"/.githooks/*|"$meta_root"/AGENTS.md|"$meta_root"/.claude/settings.json|"$meta_root"/opencode.json|"$meta_root"/mise.toml|"$meta_root"/hk.pkl|"$meta_root"/.gitconfig|"$meta_root"/mise-tasks/*|"$meta_root"/.gitignore)
+  "$meta_root"/.githooks/*|"$meta_root"/AGENTS.md|"$meta_root"/.claude/settings.json|"$meta_root"/mise.toml|"$meta_root"/hk.pkl|"$meta_root"/.gitconfig|"$meta_root"/mise-tasks/*|"$meta_root"/.gitignore)
     block "Edit blocked: $abs is meta-repo infrastructure. Modifying it changes the rules for all agents. Ask the user to confirm and edit it themselves."
     ;;
 esac

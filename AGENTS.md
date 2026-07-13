@@ -1,17 +1,22 @@
 # Agent workspace
 
-This is a public **workspace repo** that coordinates multiple normal Git clones. Source repos live as local clones under `repos/`, and per-task Git worktrees live under `worktrees/<task>/<repo>`.
+This is a local **workspace repo** that coordinates multiple normal Git repos with `git subtree`. Upstream repos are imported as first-class subtree folders at the project root. Per-task workspace worktrees live under `.worktrees/<task>`.
 
-When asked to inspect or work on source code, default to this workspace at `~/workspace`, not `~`. Prefer the local clones under `repos/` for reading/searching and your own branch's worktrees under `worktrees/` for edits.
+When asked to inspect or work on source code, default to this project root (the directory containing this `AGENTS.md`), not `~` or a hard-coded workspace path. Search/read top-level subtree folders directly. Make source edits only in your own branch's workspace worktree under `.worktrees/`.
 
 ## Layout
 
-```
-repos/<repo>/                 ← base clone, read-only cache of the default branch
-worktrees/<task>/<repo>/      ← task checkout, branch name matches <task>
+```text
+<prefix>/                       <- repo contents imported with git subtree
+.worktrees/<task>/              <- one workspace checkout, branch name matches <task>
+.worktrees/<task>/<prefix>/     <- task copy of the subtree folder to edit
 ```
 
-Agents should do repo work only inside `worktrees/<task>/<repo>/`. Never edit, commit, or push from `repos/<repo>/`.
+Most prefixes are the repo name, but `mise run add <name> <url> [prefix]` can register a different subtree path when needed.
+
+Agents should do repo task work only inside `.worktrees/<task>/<prefix>/`. The top-level subtree folders are source snapshots for reading/searching and for subtree sync commits; do not edit them directly for feature work.
+
+Do not put checkout files under `.git/worktrees/`. Git owns `.git/worktrees/` for internal metadata about linked worktrees; actual working tree directories live outside `.git`, currently under `.worktrees/<task>/`.
 
 ## Workflow
 
@@ -21,11 +26,11 @@ Agents should do repo work only inside `worktrees/<task>/<repo>/`. Never edit, c
 mise run list
 ```
 
-This shows the repos already supported by the workspace and existing task worktrees. Check this before cloning anything outside the workspace.
+This shows the repos already registered as subtree remotes and existing task worktrees. Check this before adding anything.
 
-Prefer local clones for repository inspection and search. If a GitLab/GitHub repo is needed for code search, CODEOWNERS lookup, or MR investigation and it is not listed, add it with `mise run add <name> <url> [branch]` and search the local clone instead of using `glab api` for broad repository scans. Use API calls for metadata, MR state, approvals, comments, or small targeted lookups where local files are not enough.
+If a GitLab/GitHub repo is needed for code search, CODEOWNERS lookup, or MR investigation and it is not listed, add it with `mise run add <name> <url> [prefix]` and search the imported subtree instead of using `glab api` for broad repository scans. Use API calls for metadata, MR state, approvals, comments, or small targeted lookups where local files are not enough.
 
-For internal GitLab repos, derive the SSH URL directly from the project URL when possible. For example, `https://gitlab.cfdata.org/cloudflare/backstage/backstage` becomes `git@gitlab.cfdata.org:cloudflare/backstage/backstage.git`, then add it with `mise run add backstage git@gitlab.cfdata.org:cloudflare/backstage/backstage.git`. If the repo path is unknown, use GitLab project search only to identify the repo and its `ssh_url_to_repo`, for example `glab api 'projects?search=backstage&simple=true&per_page=100'` or `glab api 'groups/cloudflare/projects?search=backstage&include_subgroups=true&simple=true&per_page=100'`. Then run `mise run add <name> <ssh_url_to_repo>` and search the local clone; do not use `glab api` for code/content searches.
+For internal GitLab repos, derive the SSH URL directly from the project URL when possible. For example, `https://gitlab.cfdata.org/cloudflare/backstage/backstage` becomes `git@gitlab.cfdata.org:cloudflare/backstage/backstage.git`, then add it with `mise run add backstage git@gitlab.cfdata.org:cloudflare/backstage/backstage.git`. If the repo path is unknown, use GitLab project search only to identify the repo and its `ssh_url_to_repo`, for example `glab api 'projects?search=backstage&simple=true&per_page=100'` or `glab api 'groups/cloudflare/projects?search=backstage&include_subgroups=true&simple=true&per_page=100'`. Then run `mise run add <name> <ssh_url_to_repo>` and search the imported subtree; do not use `glab api` for code/content searches.
 
 If a needed repo is not listed, add it to the workspace instead of cloning it manually:
 
@@ -33,31 +38,33 @@ If a needed repo is not listed, add it to the workspace instead of cloning it ma
 mise run add workers-sdk git@github.com:cloudflare/workers-sdk.git
 ```
 
-Use the repo name that should appear under `repos/<repo>`. The add task creates the base clone under `repos/` and records the default branch for future task stripes.
+Use the repo name that should identify the upstream. The add task registers a `workspace-<repo>` remote, records the default branch and subtree prefix in Git config, and imports the repo into local `main` with `git subtree`.
 
 ### 1. Sync
 
 ```bash
-mise run pull
+mise run sync
 ```
 
-This fast-forwards the workspace repo and each base clone in `repos/*`.
+This fetches each registered `workspace-*` remote, updates the corresponding top-level prefixes as snapshots on local `main`, prunes stale Git state, and removes clean task worktrees whose repo branches have merged or whose MR/PR is closed or merged.
+
+Use `mise run pull [repo...]` when you only need to refresh snapshots. Use `mise run clean` when you only need cleanup.
 
 ### 2. Start A Task
 
 ```bash
 mise run branch JIRA-123
-cd worktrees/JIRA-123
+cd .worktrees/JIRA-123
 ```
 
-This creates one Git worktree per configured repo. Each checkout uses branch `JIRA-123`, so PR/MR branches are consistent across repos.
+This creates one Git worktree for the whole workspace. The worktree branch is `JIRA-123`, and `mise run push` will push `JIRA-123` to each changed repo.
 
 ### 3. Work
 
-- Edit files under `worktrees/<task>/<repo>/`.
-- Commit inside each repo worktree as usual.
-- Use `mise run status` and `mise run diff` from `worktrees/<task>` for aggregated views.
-- Do not commit from `repos/*`; those are base clones only.
+- Edit files under `.worktrees/<task>/<prefix>/`.
+- Commit once from `.worktrees/<task>` when the change spans repos.
+- Use `mise run status` and `mise run diff` from `.worktrees/<task>` for aggregated views.
+- Do not edit top-level subtree folders directly for feature work.
 
 ### 4. Ship
 
@@ -65,7 +72,9 @@ This creates one Git worktree per configured repo. Each checkout uses branch `JI
 mise run push
 ```
 
-Run this from `worktrees/<task>`. It pushes branch `<task>` for each repo with commits.
+Run this from `.worktrees/<task>`. It runs `git subtree push` for changed prefixes and pushes branch `<task>` to each repo's origin.
+
+Do not use raw `git push` from a task worktree.
 
 ### 5. Clean Up
 
@@ -73,15 +82,15 @@ Run this from `worktrees/<task>`. It pushes branch `<task>` for each repo with c
 mise run clean JIRA-123
 ```
 
-This removes clean repo worktrees for the task.
+This removes the clean workspace worktree for the task. Running `mise run clean` with no task prunes stale Git state and removes clean task worktrees whose repo branches have merged or whose MR/PR is closed or merged.
 
 ## Rules
 
-- `repos/*` is read-only for agents.
-- Repo edits happen in `worktrees/<task>/<repo>/*`.
+- Top-level subtree folders are first-class source snapshots.
+- Repo task edits happen in `.worktrees/<task>/<prefix>/*`.
 - Task name and branch name are the same across repos.
-- The workspace repo should only commit tooling, docs, hooks, and config.
-- Workspace commits must not include `repos/*` or `worktrees/*`.
+- The top-level workspace repo is coordination state. Committing root snapshot updates is normal; upstream source changes should happen in task worktrees.
+- Use `mise run pull` and `mise run push` for cross-repo Git operations.
 - `--no-verify`, `core.hooksPath` reconfiguration, and `git worktree remove --force` are blocked.
 
 ## Merge Requests
@@ -133,13 +142,14 @@ References: [`chat-banda` thread](https://chat.google.com/room/example)
 
 | Goal | Use |
 |---|---|
-| Add a repo clone | `mise run add <name> <url> [branch]` |
+| Register a repo remote and add its subtree | `mise run add <name> <url> [prefix]` |
 | List repos and tasks | `mise run list` |
-| Pull workspace and base repos | `mise run pull [repo...]` |
-| Create a task stripe | `mise run branch <task> [repo...]` |
+| Sync snapshots and cleanup | `mise run sync [repo...]` |
+| Pull subtree defaults only | `mise run pull [repo...]` |
+| Create a task workspace worktree | `mise run branch <task> [repo...]` |
 | Aggregate status | `mise run status [repo...]` |
 | Aggregate diff | `mise run diff [repo...]` |
 | Push task branches | `mise run push [repo...]` |
-| Remove clean task worktrees | `mise run clean <task>` |
+| Clean task worktrees and stale state | `mise run clean [task|--merged|--prune]` |
 
-Raw Git is fine inside `worktrees/<task>/<repo>`. Prefer mise tasks for cross-repo operations.
+Raw Git commit/status/diff is fine inside `.worktrees/<task>`. Prefer mise tasks for cross-repo pull/push operations.

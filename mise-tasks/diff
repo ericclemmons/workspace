@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Show aggregated diffs for repos in a task worktree. Usage: diff [repo...] [-- git-diff-args...]"
+#MISE description="Show root or per-prefix diffs in a task worktree. Usage: diff [repo...] [-- git-diff-args...]"
 source "${MISE_TASK_DIR:-$(dirname "$0")}/_lib"
 
 require_task_root
@@ -25,17 +25,18 @@ if [[ ${#repos[@]} -eq 0 ]]; then
   while IFS= read -r repo; do repos+=("$repo"); done < <(list_task_repos)
 fi
 
-[[ ${#repos[@]} -gt 0 ]] || die "no repo worktrees found in worktrees/$branch"
+[[ ${#repos[@]} -gt 0 ]] || die "no repo worktrees found in .worktrees/$branch"
 
 for repo in "${repos[@]}"; do
   validate_name "repo" "$repo"
-  wt="$task/$repo"
-  [[ -d "$wt/.git" || -f "$wt/.git" ]] || die "worktrees/$branch/$repo is not a git repo"
+  prefix=$(repo_prefix "$repo")
+  [[ -e "$task/$prefix" ]] || die ".worktrees/$branch is missing prefix $prefix for $repo"
   echo
-  info "diff: $repo"
+  info "diff: $repo ($prefix)"
   if [[ ${#diff_args[@]} -gt 0 ]]; then
-    git -C "$wt" diff "${diff_args[@]}"
+    git -C "$task" diff "${diff_args[@]}" -- "$prefix"
   else
-    git -C "$wt" diff
+    git -C "$task" diff main..HEAD -- "$prefix"
+    git -C "$task" diff -- "$prefix"
   fi
 done

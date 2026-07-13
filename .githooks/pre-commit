@@ -3,31 +3,16 @@
 # Run by hk via hk.pkl.
 set -euo pipefail
 
-# Allow privileged ops for tests/bootstrap commits.
+# Allow privileged ops for tests.
 [[ "${META_ALLOW_COMMIT:-}" == "1" ]] && exit 0
 
-branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "DETACHED")
-toplevel=$(git rev-parse --show-toplevel)
-
-# No direct commits on main.
-if [[ "$branch" == "main" ]]; then
+# The public workspace repo must never commit task checkout contents.
+if git diff --cached --name-only | grep -qE '^\.worktrees/'; then
   cat >&2 <<EOF
-✗ Direct commits to main are not allowed.
+✗ Workspace commits cannot include .worktrees/.
 
-Create a worktree on a new branch:
-  mise run branch <name>
-  cd worktrees/<name>
-EOF
-  exit 1
-fi
-
-# The public workspace repo must never commit private/base checkout contents.
-if git diff --cached --name-only | grep -qE '^(repos|worktrees)/'; then
-  cat >&2 <<EOF
-✗ Workspace commits cannot include repos/ or worktrees/.
-
-repos/ contains base clones and worktrees/ contains per-task repo worktrees.
-Only commit workspace tooling, docs, hooks, and config in this repo.
+.worktrees/ contains per-task workspace checkouts.
+Only commit subtree snapshots, workspace tooling, docs, hooks, and config in this repo.
 EOF
   exit 1
 fi
